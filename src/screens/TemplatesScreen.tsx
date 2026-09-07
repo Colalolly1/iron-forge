@@ -1,0 +1,386 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Card } from '../components/Card';
+import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
+import { Button } from '../components/Button';
+import { useWorkout } from '../context/WorkoutContext';
+import { getTemplates, saveTemplate, deleteTemplate, getProfile } from '../utils/storage';
+import { importTemplatesJSON } from '../utils/importTemplates';
+import { readPickedFile } from '../utils/export';
+import * as DocumentPicker from 'expo-document-picker';
+import { EXERCISE_MAP } from '../data/exercises';
+import { DEFAULT_TEMPLATES } from '../data/templates';
+import {
+  formatDuration,
+  generateId,
+  getMuscleGroupColor,
+} from '../utils/helpers';
+import { WorkoutTemplate, WorkoutExercise } from '../types';
+import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
+
+export function TemplatesScreen({ navigation }: any) {
+  const { startWorkout, isWorkoutActive } = useWorkout();
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+
+  const loadData = useCallback(async () => {
+    let ts = await getTemplates();
+    // Seed defaults if none exist
+    if (ts.length === 0) {
+      for (const t of DEFAULT_TEMPLATES) {
+        await saveTemplate(t);
+      }
+      ts = DEFAULT_TEMPLATES;
+    }
+    setTemplates(ts);
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const unsub = navigation?.addListener?.('focus', loadData);
+    return unsub;
+  }, [loadData, navigation]);
+
+  const handleStartFromTemplate = (template: WorkoutTemplate) => {
+    if (isWorkoutActive) {
+      Alert.alert('Workout in progress', 'Finish or discard your current workout first.');
+      return;
+    }
+
+    // Convert template to workout exercises
+    const exercises: WorkoutExercise[] = template.exercises
+      .map(te => {
+        const exercise = EXERCISE_MAP.get(te.exerciseId);
+        if (!exercise) return null;
+        return {
+          id: generateId(),
+          exerciseId: te.exerciseId,
+          exercise,
+          sets: Array.from({ length: te.sets }, (_, i) => ({
+            id: generateId(),
+            setNumber: i + 1,
+            weight: 0,
+            reps: 0,
+            completed: false,
+          })),
+          notes: te.notes,
+          supersetGroupId: te.supersetGroupId,
+          order: te.order,
+        } as WorkoutExercise;
+      })
+      .filter(Boolean) as WorkoutExercise[];
+
+    startWorkout(template.name, exercises);
+    navigation.navigate('ActiveWorkout');
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Templates</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Quick Start */}
+        <Button
+          title="Empty Workout"
+          onPress={() => {
+            if (isWorkoutActive) {
+              navigation.navigate('ActiveWorkout');
+            } else {
+              startWorkout();
+              navigation.navigate('ActiveWorkout');
+            }
+          }}
+          size="lg"
+          fullWidth
+          icon={<Ionicons name="flash" size={20} color={Colors.textInverse} />}
+        />
+
+        <Button
+          title="Create Template"
+          onPress={() => navigation.navigate('EditTemplate')}
+          variant="secondary"
+          size="lg"
+          fullWidth
+          icon={<Ionicons name="add-circle-outline" size={20} color={Colors.text} />}
+        />
+
+        <Button
+          title="Import Template"
+          onPress={async () => {
+            try {
+              const result = await DocumentPicker.getDocumentAsync({
+                type: ['application/json', 'text/plain', '*/*'],
+                copyToCacheDirectory: true,
+              });
+              if (result.canceled || !result.assets?.[0]) return;
+              const content = await readPickedFile(result.assets[0].uri);
+              const { imported, skippedExercises, createdCustom } = await importTemplatesJSON(content);
+              let msg = `Imported ${imported} template${imported !== 1 ? 's' : ''}.`;
+              if (createdCustom.length > 0) {
+                msg += `\n\nCreated ${createdCustom.length} new custom exercise${createdCustom.length !== 1 ? 's' : ''}:\n${createdCustom.slice(0, 5).join('\n')}`;
+              }
+              if (skippedExercises.length > 0) {
+                msg += `\n\nSkipped ${skippedExercises.length} unrecognised exercise${skippedExercises.length !== 1 ? 's' : ''}.`;
+              }
+              Alert.alert('Import Complete', msg);
+              loadData();
+            } catch (e: any) {
+              Alert.alert('Import Failed', e.message || 'Could not read the file.');
+            }
+          }}
+          variant="secondary"
+          size="lg"
+          fullWidth
+          icon={<Ionicons name="download-outline" size={20} color={Colors.text} />}
+        />
+
+        {/* Template Grid */}
+        <Text style={styles.sectionTitle}>Workout Templates</Text>
+
+        {templates.map(template => (
+          <View key={template.id} style={styles.templateCard}>
+              <View style={styles.templateHeader}>
+                <Text style={styles.templateIcon}>{template.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.templateName}>
+                    {template.name}
+                    {template.isCustom && (
+                      <Text style={styles.customBadge}> (Custom)</Text>
+                    )}
+                  </Text>
+                  <Text style={styles.templateDesc}>{template.description}</Text>
+                </View>
+                <View style={styles.templateActions}>
+                  <Pressable
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Template?',
+                        `Remove "${template.name}"? This cannot be undone.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Delete',
+                            style: 'destructive',
+                            onPress: async () => {
+                              await deleteTemplate(template.id);
+                              loadData();
+                            },
+                          },
+                        ]
+                      );
+                    }}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                  </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.templateExercises}>
+                {template.exercises.map((te, i) => {
+                  const ex = EXERCISE_MAP.get(te.exerciseId);
+                  const isInSuperset = !!te.supersetGroupId;
+                  const prevInSame = i > 0 && template.exercises[i - 1]?.supersetGroupId === te.supersetGroupId && isInSuperset;
+                  return (
+                    <View key={i} style={isInSuperset ? styles.exerciseSupersetRow : undefined}>
+                      {isInSuperset && <View style={styles.exerciseSupersetBar} />}
+                      <View>
+                        <Text style={styles.exerciseItem}>
+                          {ex?.name ?? te.exerciseId}
+                        </Text>
+                        {te.notes ? (
+                          <Text style={styles.exerciseNote}>{te.notes}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={styles.templateMuscles}>
+                {template.muscleGroups.map(m => (
+                  <MuscleGroupBadge key={m} muscle={m} />
+                ))}
+                {template.estimatedDuration && (
+                  <View style={styles.durationBadge}>
+                    <Ionicons name="time-outline" size={14} color={Colors.textSecondary} />
+                    <Text style={styles.durationText}>
+                      ~{template.estimatedDuration}m
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.templateButtonRow}>
+                <Pressable
+                  onPress={() => handleStartFromTemplate(template)}
+                  style={styles.startBtn}
+                >
+                  <Ionicons name="play" size={16} color={Colors.textInverse} />
+                  <Text style={styles.startBtnText}>Start Workout</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => navigation.navigate('EditTemplate', { template })}
+                  style={styles.editBtn}
+                >
+                  <Ionicons name="create-outline" size={16} color={Colors.text} />
+                  <Text style={styles.editBtnText}>Edit</Text>
+                </Pressable>
+              </View>
+          </View>
+        ))}
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: Colors.bg },
+  header: {
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+  },
+  title: {
+    color: Colors.text,
+    fontSize: FontSize.xxxl,
+    fontWeight: '800',
+  },
+  content: {
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  sectionTitle: {
+    color: Colors.text,
+    fontSize: FontSize.xl,
+    fontWeight: '700',
+    marginTop: Spacing.sm,
+  },
+  templateCard: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  templateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  templateActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  customBadge: {
+    color: Colors.accent,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  templateIcon: {
+    fontSize: 28,
+  },
+  templateName: {
+    color: Colors.text,
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+  },
+  templateDesc: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
+  },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.bgElevated,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+  },
+  durationText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  templateExercises: {
+    gap: 3,
+  },
+  exerciseItem: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
+  },
+  exerciseNote: {
+    color: Colors.textTertiary,
+    fontSize: FontSize.xs,
+    fontStyle: 'italic',
+    marginLeft: Spacing.sm,
+  },
+  exerciseSupersetRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  exerciseSupersetBar: {
+    width: 2,
+    backgroundColor: Colors.primary,
+    marginRight: Spacing.xs,
+    borderRadius: 1,
+  },
+  templateMuscles: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    flexWrap: 'wrap',
+  },
+  templateButtonRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: Spacing.md,
+  },
+  startBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.text,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.md,
+  },
+  startBtnText: {
+    color: Colors.textInverse,
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+  },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  editBtnText: {
+    color: Colors.text,
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+  },
+});
