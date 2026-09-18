@@ -15,7 +15,8 @@ import { useWorkout } from '../context/WorkoutContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
-import { getWorkouts, getProfile, getPRs } from '../utils/storage';
+import { getWorkouts, getProfile, getPRs, getTemplates } from '../utils/storage';
+import { exercisesFromTemplate } from '../utils/startTemplate';
 import { EXERCISE_MAP } from '../data/exercises';
 import {
   formatDuration,
@@ -24,7 +25,7 @@ import {
   getRelativeTime,
   getWorkoutMuscleGroups,
 } from '../utils/helpers';
-import { Workout, UserProfile, WorkoutStats, MuscleGroup, PersonalRecord } from '../types';
+import { Workout, UserProfile, WorkoutStats, MuscleGroup, PersonalRecord, WorkoutTemplate } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 export function HomeScreen({ navigation }: any) {
@@ -34,12 +35,14 @@ export function HomeScreen({ navigation }: any) {
   const [stats, setStats] = useState<WorkoutStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [weekPRs, setWeekPRs] = useState<PersonalRecord[]>([]);
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [showWeekPRsModal, setShowWeekPRsModal] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [ws, p, prs] = await Promise.all([getWorkouts(), getProfile(), getPRs()]);
+    const [ws, p, prs, ts] = await Promise.all([getWorkouts(), getProfile(), getPRs(), getTemplates()]);
     setWorkouts(ws);
     setProfile(p);
+    setTemplates(ts);
 
     // Calculate stats
     const now = new Date();
@@ -159,20 +162,17 @@ export function HomeScreen({ navigation }: any) {
           />
         }
       >
-        {/* Header */}
+        {/* Header: the app's name, and the two places that are not tabs. */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>
-              {getGreeting()}, {profile?.name ?? 'Athlete'}
-            </Text>
-            <Text style={styles.subtitle}>Ready to train</Text>
+          <Text style={styles.greeting}>Iron Forge</Text>
+          <View style={styles.headerWords}>
+            <Pressable onPress={() => navigation.navigate('Exercises')} hitSlop={8}>
+              <Text style={styles.word}>Exercises</Text>
+            </Pressable>
+            <Pressable onPress={() => navigation.navigate('Templates')} hitSlop={8}>
+              <Text style={styles.word}>Templates</Text>
+            </Pressable>
           </View>
-          <Pressable
-            onPress={() => navigation.navigate('Profile')}
-            style={styles.avatar}
-          >
-            <Ionicons name="person" size={22} color={Colors.primary} />
-          </Pressable>
         </View>
 
         {/* Active Workout Banner */}
@@ -196,15 +196,43 @@ export function HomeScreen({ navigation }: any) {
           </Pressable>
         )}
 
-        {/* Quick Start */}
+        {/* Start: your templates first, since that is how a workout begins. */}
         {!isWorkoutActive && (
-          <Button
-            title="Start Empty Workout"
-            onPress={handleStartWorkout}
-            size="lg"
-            fullWidth
-            icon={<Ionicons name="flash" size={20} color={Colors.textInverse} />}
-          />
+          <>
+            <Text style={styles.sectionTitle}>Start</Text>
+            <Card style={styles.startCard}>
+              {templates.map((t, i) => (
+                <Pressable
+                  key={t.id}
+                  onPress={() => {
+                    startWorkout(t.name, exercisesFromTemplate(t));
+                    navigation.navigate('ActiveWorkout');
+                  }}
+                  style={({ pressed }) => [
+                    styles.startRow,
+                    i < templates.length && styles.startRowLine,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.startName}>{t.name}</Text>
+                    <Text style={styles.startMeta}>
+                      {t.exercises.length} exercises
+                      {t.estimatedDuration ? ` · ${t.estimatedDuration} min` : ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="play" size={18} color={Colors.textSecondary} />
+                </Pressable>
+              ))}
+              <Pressable
+                onPress={handleStartWorkout}
+                style={({ pressed }) => [styles.startRow, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.startEmpty}>Empty workout</Text>
+                <Ionicons name="add" size={18} color={Colors.textSecondary} />
+              </Pressable>
+            </Card>
+          </>
         )}
 
         {/* Stats Cards */}
@@ -437,23 +465,46 @@ const styles = StyleSheet.create({
   },
   greeting: {
     color: Colors.text,
-    fontSize: FontSize.xxl,
-    fontWeight: '800',
+    fontSize: FontSize.xl,
+    fontWeight: '700',
   },
-  subtitle: {
+  headerWords: {
+    flexDirection: 'row',
+    gap: Spacing.lg,
+  },
+  word: {
     color: Colors.textSecondary,
     fontSize: FontSize.md,
+    fontWeight: '500',
+  },
+  startCard: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  startRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+  },
+  startRowLine: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  startName: {
+    color: Colors.text,
+    fontSize: FontSize.md,
+    fontWeight: '600',
+  },
+  startMeta: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
     marginTop: 2,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.primary,
+  startEmpty: {
+    flex: 1,
+    color: Colors.textSecondary,
+    fontSize: FontSize.md,
   },
   activeBanner: {
     flexDirection: 'row',

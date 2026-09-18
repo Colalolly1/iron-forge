@@ -50,9 +50,9 @@ function TabNavigator() {
           backgroundColor: Colors.bgCard,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 85,
+          height: 78,
           paddingTop: 8,
-          paddingBottom: 28,
+          paddingBottom: 22,
         },
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: Colors.textTertiary,
@@ -89,8 +89,6 @@ function TabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Templates" component={TemplatesScreen} />
-      <Tab.Screen name="Exercises" component={ExercisesScreen} />
       <Tab.Screen name="History" component={HistoryScreen} />
       <Tab.Screen name="Stats" component={StatsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
@@ -118,6 +116,8 @@ export default function App() {
             }}
           >
             <Stack.Screen name="Tabs" component={TabNavigator} />
+            <Stack.Screen name="Templates" component={TemplatesScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Exercises" component={ExercisesScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen
               name="ActiveWorkout"
               component={ActiveWorkoutScreen}

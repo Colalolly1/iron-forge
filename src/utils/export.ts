@@ -12,15 +12,19 @@ function escapeCsv(val: string): string {
 
 export function exportWorkoutsCSV(workouts: Workout[], unit: string): string {
   // Strong app compatible format — one row per set
-  const header = 'Date,Workout Name,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout Notes,RPE';
+  // Duration is Strong's own column ("1h 5m"); without it a re-import gives every workout 0 minutes.
+  const header = 'Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Seconds,Notes,Workout Notes,RPE';
   const rows: string[] = [];
   workouts.forEach(w => {
     const date = new Date(w.startTime).toISOString().replace('T', ' ').slice(0, 19);
+    const mins = Math.max(0, Math.round(w.duration ?? 0));
+    const duration = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
     w.exercises.forEach(e => {
       e.sets.forEach(s => {
         rows.push([
           date,
           escapeCsv(w.name),
+          duration,
           escapeCsv(e.exercise.name),
           String(s.setNumber),
           s.weight > 0 ? String(s.weight) : '0',

@@ -19,6 +19,7 @@ import { importTemplatesJSON } from '../utils/importTemplates';
 import { readPickedFile } from '../utils/export';
 import * as DocumentPicker from 'expo-document-picker';
 import { EXERCISE_MAP } from '../data/exercises';
+import { exercisesFromTemplate } from '../utils/startTemplate';
 import { DEFAULT_TEMPLATES } from '../data/templates';
 import {
   formatDuration,
@@ -56,29 +57,7 @@ export function TemplatesScreen({ navigation }: any) {
       return;
     }
 
-    // Convert template to workout exercises
-    const exercises: WorkoutExercise[] = template.exercises
-      .map(te => {
-        const exercise = EXERCISE_MAP.get(te.exerciseId);
-        if (!exercise) return null;
-        return {
-          id: generateId(),
-          exerciseId: te.exerciseId,
-          exercise,
-          sets: Array.from({ length: te.sets }, (_, i) => ({
-            id: generateId(),
-            setNumber: i + 1,
-            weight: 0,
-            reps: 0,
-            completed: false,
-          })),
-          notes: te.notes,
-          supersetGroupId: te.supersetGroupId,
-          order: te.order,
-        } as WorkoutExercise;
-      })
-      .filter(Boolean) as WorkoutExercise[];
-
+    const exercises = exercisesFromTemplate(template);
     startWorkout(template.name, exercises);
     navigation.navigate('ActiveWorkout');
   };
