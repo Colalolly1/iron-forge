@@ -29,6 +29,45 @@ interface WorkoutSection {
   data: Workout[];
 }
 
+/** One workout in a list: date and time on the left, what it was on the right. */
+function WorkoutRow({ workout: w, unit, navigation }: { workout: Workout; unit: string; navigation: any }) {
+  const muscles = getWorkoutMuscleGroups(w);
+  const d = new Date(w.startTime);
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return (
+    <Pressable
+      onPress={() => navigation.navigate('WorkoutDetail', { workoutId: w.id })}
+      style={({ pressed }) => [histStyles.card, pressed && { opacity: 0.8 }]}
+    >
+      <View style={histStyles.dateCol}>
+        <Text style={histStyles.day}>{d.getDate()}</Text>
+        <Text style={histStyles.weekday}>
+          {d.toLocaleDateString('en-US', { weekday: 'short' })}
+        </Text>
+        <Text style={histStyles.time}>{time}</Text>
+      </View>
+
+      <View style={histStyles.content}>
+        <Text style={histStyles.name}>{w.name}</Text>
+        <View style={histStyles.stats}>
+          <Text style={histStyles.stat}>{formatDuration(w.duration)}</Text>
+          <Text style={histStyles.statSep}>|</Text>
+          <Text style={histStyles.stat}>{w.totalSets} sets</Text>
+          <Text style={histStyles.statSep}>|</Text>
+          <Text style={histStyles.stat}>{formatNumber(w.totalVolume)} {unit}</Text>
+        </View>
+        <View style={histStyles.muscles}>
+          {muscles.slice(0, 3).map(m => (
+            <MuscleGroupBadge key={m} muscle={m} />
+          ))}
+        </View>
+      </View>
+
+      <Ionicons name="chevron-forward" size={20} color={Colors.textTertiary} />
+    </Pressable>
+  );
+}
+
 export function HistoryScreen({ navigation }: any) {
   const [allWorkouts, setAllWorkouts] = useState<Workout[]>([]);
   const [sections, setSections] = useState<WorkoutSection[]>([]);
@@ -44,9 +83,15 @@ export function HistoryScreen({ navigation }: any) {
     setProfile(p);
     setAllWorkouts(ws);
 
+    // Newest first, so the most recent month is the first section and the
+    // most recent workout the first row in it.
+    const newestFirst = [...ws].sort(
+      (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+    );
+
     // Group by month
     const groups: Record<string, Workout[]> = {};
-    ws.forEach(w => {
+    newestFirst.forEach(w => {
       const d = new Date(w.startTime);
       const key = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       if (!groups[key]) groups[key] = [];
@@ -122,48 +167,9 @@ export function HistoryScreen({ navigation }: any) {
     return calendarDays.reduce((sum, d) => sum + d.workouts.length, 0);
   }, [calendarDays]);
 
-  const renderWorkout = ({ item: w }: { item: Workout }) => {
-    const muscles = getWorkoutMuscleGroups(w);
-    const d = new Date(w.startTime);
-    return (
-      <Pressable
-        onPress={() => navigation.navigate('WorkoutDetail', { workoutId: w.id })}
-        style={({ pressed }) => [
-          histStyles.card,
-          pressed && { opacity: 0.8 },
-        ]}
-      >
-        <View style={histStyles.dateCol}>
-          <Text style={histStyles.day}>{d.getDate()}</Text>
-          <Text style={histStyles.weekday}>
-            {d.toLocaleDateString('en-US', { weekday: 'short' })}
-          </Text>
-        </View>
-
-        <View style={histStyles.content}>
-          <Text style={histStyles.name}>{w.name}</Text>
-          <View style={histStyles.stats}>
-            <Text style={histStyles.stat}>
-              {formatDuration(w.duration)}
-            </Text>
-            <Text style={histStyles.statSep}>|</Text>
-            <Text style={histStyles.stat}>{w.totalSets} sets</Text>
-            <Text style={histStyles.statSep}>|</Text>
-            <Text style={histStyles.stat}>
-              {formatNumber(w.totalVolume)} {unit}
-            </Text>
-          </View>
-          <View style={histStyles.muscles}>
-            {muscles.slice(0, 3).map(m => (
-              <MuscleGroupBadge key={m} muscle={m} />
-            ))}
-          </View>
-        </View>
-
-        <Ionicons name="chevron-forward" size={20} color={Colors.textTertiary} />
-      </Pressable>
-    );
-  };
+  const renderWorkout = ({ item: w }: { item: Workout }) => (
+    <WorkoutRow workout={w} unit={unit} navigation={navigation} />
+  );
 
   const cellSize = Math.floor((SCREEN_WIDTH - Spacing.md * 2) / 7);
 
@@ -269,43 +275,9 @@ export function HistoryScreen({ navigation }: any) {
             {calendarDays
               .flatMap(d => d.workouts)
               .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
-              .map(w => {
-                const muscles = getWorkoutMuscleGroups(w);
-                const d = new Date(w.startTime);
-                return (
-                  <Pressable
-                    key={w.id}
-                    onPress={() => navigation.navigate('WorkoutDetail', { workoutId: w.id })}
-                    style={({ pressed }) => [
-                      histStyles.card,
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <View style={histStyles.dateCol}>
-                      <Text style={histStyles.day}>{d.getDate()}</Text>
-                      <Text style={histStyles.weekday}>
-                        {d.toLocaleDateString('en-US', { weekday: 'short' })}
-                      </Text>
-                    </View>
-                    <View style={histStyles.content}>
-                      <Text style={histStyles.name}>{w.name}</Text>
-                      <View style={histStyles.stats}>
-                        <Text style={histStyles.stat}>{formatDuration(w.duration)}</Text>
-                        <Text style={histStyles.statSep}>|</Text>
-                        <Text style={histStyles.stat}>{w.totalSets} sets</Text>
-                        <Text style={histStyles.statSep}>|</Text>
-                        <Text style={histStyles.stat}>{formatNumber(w.totalVolume)} {unit}</Text>
-                      </View>
-                      <View style={histStyles.muscles}>
-                        {muscles.slice(0, 3).map(m => (
-                          <MuscleGroupBadge key={m} muscle={m} />
-                        ))}
-                      </View>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={Colors.textTertiary} />
-                  </Pressable>
-                );
-              })}
+              .map(w => (
+                <WorkoutRow key={w.id} workout={w} unit={unit} navigation={navigation} />
+              ))}
             {monthWorkoutCount === 0 && (
               <Text style={calStyles.noWorkouts}>No workouts this month</Text>
             )}
@@ -500,6 +472,12 @@ const histStyles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: FontSize.xs,
     fontWeight: '600',
+  },
+  time: {
+    color: Colors.textTertiary,
+    fontSize: FontSize.xs,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
   content: {
     flex: 1,

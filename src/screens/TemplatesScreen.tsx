@@ -125,13 +125,22 @@ export function TemplatesScreen({ navigation }: any) {
               });
               if (result.canceled || !result.assets?.[0]) return;
               const content = await readPickedFile(result.assets[0].uri);
-              const { imported, skippedExercises, createdCustom } = await importTemplatesJSON(content);
-              let msg = `Imported ${imported} template${imported !== 1 ? 's' : ''}.`;
-              if (createdCustom.length > 0) {
-                msg += `\n\nCreated ${createdCustom.length} new custom exercise${createdCustom.length !== 1 ? 's' : ''}:\n${createdCustom.slice(0, 5).join('\n')}`;
+              const r = await importTemplatesJSON(content);
+              const parts: string[] = [];
+              if (r.imported > 0) parts.push(`${r.imported} new template${r.imported !== 1 ? 's' : ''}`);
+              if (r.updated > 0) parts.push(`${r.updated} updated`);
+              let msg = `Imported ${parts.join(', ')}.`;
+              if (r.customExercisesAdded > 0) {
+                msg += `\n${r.customExercisesAdded} custom exercise${r.customExercisesAdded !== 1 ? 's' : ''} restored.`;
               }
-              if (skippedExercises.length > 0) {
-                msg += `\n\nSkipped ${skippedExercises.length} unrecognised exercise${skippedExercises.length !== 1 ? 's' : ''}.`;
+              if (r.notesRestored > 0 || r.timersRestored > 0) {
+                msg += `\n${r.notesRestored} note${r.notesRestored !== 1 ? 's' : ''}, ${r.timersRestored} rest timer${r.timersRestored !== 1 ? 's' : ''} restored.`;
+              }
+              if (r.createdCustom.length > 0) {
+                msg += `\n\nCreated ${r.createdCustom.length} new custom exercise${r.createdCustom.length !== 1 ? 's' : ''}:\n${r.createdCustom.slice(0, 5).join('\n')}`;
+              }
+              if (r.skippedExercises.length > 0) {
+                msg += `\n\nSkipped ${r.skippedExercises.length} unrecognised exercise${r.skippedExercises.length !== 1 ? 's' : ''}.`;
               }
               Alert.alert('Import Complete', msg);
               loadData();

@@ -1,30 +1,41 @@
 import { WorkoutTemplate, MuscleGroup, Exercise } from '../types';
 import { EXERCISE_MAP } from '../data/exercises';
 import { generateId } from './helpers';
-import { saveTemplate, saveCustomExercise } from './storage';
+import {
+  getTemplates,
+  saveTemplate,
+  saveCustomExercise,
+  getCustomExercises,
+  getExerciseNotes,
+  getExerciseRestTimers,
+  mergeExerciseNotes,
+  mergeExerciseRestTimers,
+} from './storage';
 import { fuzzyMatchExercise, createCustomExerciseFromName } from './importStrong';
 
 /**
- * Import workout templates from a JSON file.
+ * Template transfer file format (import + export).
  *
- * Expected format:
  * {
  *   "ironforge": "templates",
+ *   "version": 2,
+ *   "customExercises": [ { "id", "name", "primaryMuscle", "secondaryMuscles", "category", "force" } ],
  *   "templates": [
  *     {
- *       "name": "Day A — Push",
- *       "description": "optional",
- *       "icon": "🏋️",
+ *       "name": "Upper 1", "description": "optional", "icon": "🏋️",
  *       "exercises": [
- *         { "exercise": "Barbell Bench Press", "sets": 4, "notes": "optional" },
- *         { "exerciseId": "bb-bench-press", "sets": 4 }
+ *         { "exercise": "Barbell Bench Press", "exerciseId": "bb-bench-press", "sets": 4,
+ *           "supersetGroup": "A", "notes": "optional", "targetReps": 8, "targetWeight": 40 }
  *       ]
  *     }
- *   ]
+ *   ],
+ *   "exerciseNotes": [ { "exerciseId", "exercise", "note" } ],
+ *   "restTimers":    [ { "exerciseId", "exercise", "seconds" } ]
  * }
  *
- * Exercises are matched by exerciseId first, then by name (exact then fuzzy).
- * Unmatched names are created as custom exercises.
+ * Only "templates" is required. Exercises are matched by exerciseId, then exact
+ * name, then fuzzy name; unmatched names become custom exercises. A template
+ * whose name already exists is updated in place rather than duplicated.
  */
 
 interface TemplateFileExercise {
@@ -44,16 +55,44 @@ interface TemplateFileEntry {
   exercises?: TemplateFileExercise[];
 }
 
-interface TemplateFile {
-  ironforge?: string;
-  templates?: TemplateFileEntry[];
+interface TemplateFileCustomExercise {
+  id?: string;
+  name?: string;
+  primaryMuscle?: string;
+  secondaryMuscles?: string[];
+  category?: string;
+  force?: string;
 }
 
-export async function importTemplatesJSON(jsonContent: string): Promise<{
+interface NoteEntry { exerciseId?: string; exercise?: string; note?: string }
+interface TimerEntry { exerciseId?: string; exercise?: string; seconds?: number }
+
+interface TemplateFile {
+  ironforge?: string;
+  version?: number;
+  customExercises?: TemplateFileCustomExercise[];
+  templates?: TemplateFileEntry[];
+  exerciseNotes?: NoteEntry[] | Record<string, string>;
+  restTimers?: TimerEntry[] | Record<string, number>;
+}
+
+export interface TemplateImportResult {
   imported: number;
-  skippedExercises: string[];
+  updated: number;
+  customExercisesAdded: number;
+  notesRestored: number;
+  timersRestored: number;
   createdCustom: string[];
-}> {
+  skippedExercises: string[];
+}
+
+function resolveExercise(fe: { exerciseId?: string; exercise?: string }): Exercise | null {
+  if (fe.exerciseId && EXERCISE_MAP.has(fe.exerciseId)) return EXERCISE_MAP.get(fe.exerciseId)!;
+  if (fe.exercise) return fuzzyMatchExercise(fe.exercise);
+  return null;
+}
+
+export async function importTemplatesJSON(jsonContent: string): Promise<TemplateImportResult> {
   let data: TemplateFile;
   try {
     data = JSON.parse(jsonContent);
@@ -66,9 +105,39 @@ export async function importTemplatesJSON(jsonContent: string): Promise<{
     throw new Error('No templates found in file. Expected a "templates" list.');
   }
 
-  const skippedExercises: string[] = [];
-  const createdCustom: string[] = [];
-  let imported = 0;
+  const result: TemplateImportResult = {
+    imported: 0,
+    updated: 0,
+    customExercisesAdded: 0,
+    notesRestored: 0,
+    timersRestored: 0,
+    createdCustom: [],
+    skippedExercises: [],
+  };
+
+  // 1. Custom exercise definitions first, so templates can reference them by id
+  if (Array.isArray(data.customExercises)) {
+    for (const ce of data.customExercises) {
+      if (!ce?.name) continue;
+      const id = ce.id || `import-${ce.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const exercise: Exercise = {
+        ...(EXERCISE_MAP.get(id) ?? {}),
+        id,
+        name: ce.name,
+        primaryMuscle: (ce.primaryMuscle as MuscleGroup) || 'full_body',
+        secondaryMuscles: (ce.secondaryMuscles as MuscleGroup[]) || [],
+        category: (ce.category as Exercise['category']) || 'other',
+        force: (ce.force as Exercise['force']) || 'compound',
+        isCustom: true,
+      };
+      await saveCustomExercise(exercise);
+      EXERCISE_MAP.set(id, exercise);
+      result.customExercisesAdded++;
+    }
+  }
+
+  // 2. Templates — update in place when a template with the same name exists
+  const existingTemplates = await getTemplates();
 
   for (const entry of entries) {
     if (!entry?.name || !Array.isArray(entry.exercises) || entry.exercises.length === 0) {
@@ -77,32 +146,24 @@ export async function importTemplatesJSON(jsonContent: string): Promise<{
 
     const templateExercises: WorkoutTemplate['exercises'] = [];
     const muscleSet = new Set<MuscleGroup>();
-    // Map file-level superset group labels to generated IDs
     const supersetIds = new Map<string, string>();
     let order = 0;
 
     for (const fe of entry.exercises) {
-      let exercise: Exercise | null = null;
-
-      if (fe.exerciseId && EXERCISE_MAP.has(fe.exerciseId)) {
-        exercise = EXERCISE_MAP.get(fe.exerciseId)!;
-      } else if (fe.exercise) {
-        exercise = fuzzyMatchExercise(fe.exercise);
-        if (!exercise) {
-          exercise = createCustomExerciseFromName(fe.exercise);
-          await saveCustomExercise(exercise);
-          EXERCISE_MAP.set(exercise.id, exercise);
-          createdCustom.push(fe.exercise);
-        }
+      let exercise = resolveExercise(fe);
+      if (!exercise && fe.exercise) {
+        exercise = createCustomExerciseFromName(fe.exercise);
+        await saveCustomExercise(exercise);
+        EXERCISE_MAP.set(exercise.id, exercise);
+        result.createdCustom.push(fe.exercise);
       }
-
       if (!exercise) {
-        skippedExercises.push(fe.exerciseId || fe.exercise || 'unknown');
+        result.skippedExercises.push(fe.exerciseId || fe.exercise || 'unknown');
         continue;
       }
 
       let supersetGroupId: string | undefined;
-      if (fe.supersetGroup !== undefined && fe.supersetGroup !== null) {
+      if (fe.supersetGroup !== undefined && fe.supersetGroup !== null && fe.supersetGroup !== '') {
         const key = String(fe.supersetGroup);
         if (!supersetIds.has(key)) supersetIds.set(key, generateId());
         supersetGroupId = supersetIds.get(key);
@@ -122,25 +183,135 @@ export async function importTemplatesJSON(jsonContent: string): Promise<{
 
     if (templateExercises.length === 0) continue;
 
+    const existing = existingTemplates.find(
+      t => t.name.trim().toLowerCase() === entry.name!.trim().toLowerCase()
+    );
+
     const template: WorkoutTemplate = {
-      id: generateId(),
+      id: existing?.id ?? generateId(),
       name: entry.name,
       description: entry.description,
       exercises: templateExercises,
       muscleGroups: Array.from(muscleSet),
-      icon: entry.icon || '📋',
-      timesUsed: 0,
-      createdAt: new Date().toISOString(),
+      icon: entry.icon || existing?.icon || '📋',
+      color: existing?.color,
+      timesUsed: existing?.timesUsed ?? 0,
+      lastUsed: existing?.lastUsed,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
       isCustom: true,
     };
 
     await saveTemplate(template);
-    imported++;
+    if (existing) result.updated++;
+    else result.imported++;
   }
 
-  if (imported === 0) {
+  if (result.imported + result.updated === 0) {
     throw new Error('No valid templates could be imported from this file.');
   }
 
-  return { imported, skippedExercises, createdCustom };
+  // 3. Exercise notes and rest timers (optional)
+  const notes: Record<string, string> = {};
+  if (Array.isArray(data.exerciseNotes)) {
+    for (const n of data.exerciseNotes) {
+      const ex = resolveExercise(n);
+      if (ex && n.note) notes[ex.id] = n.note;
+    }
+  } else if (data.exerciseNotes && typeof data.exerciseNotes === 'object') {
+    for (const [id, note] of Object.entries(data.exerciseNotes)) {
+      if (EXERCISE_MAP.has(id) && note) notes[id] = note;
+    }
+  }
+  if (Object.keys(notes).length > 0) {
+    await mergeExerciseNotes(notes);
+    result.notesRestored = Object.keys(notes).length;
+  }
+
+  const timers: Record<string, number> = {};
+  if (Array.isArray(data.restTimers)) {
+    for (const t of data.restTimers) {
+      const ex = resolveExercise(t);
+      if (ex && typeof t.seconds === 'number') timers[ex.id] = t.seconds;
+    }
+  } else if (data.restTimers && typeof data.restTimers === 'object') {
+    for (const [id, secs] of Object.entries(data.restTimers)) {
+      if (EXERCISE_MAP.has(id) && typeof secs === 'number') timers[id] = secs;
+    }
+  }
+  if (Object.keys(timers).length > 0) {
+    await mergeExerciseRestTimers(timers);
+    result.timersRestored = Object.keys(timers).length;
+  }
+
+  return result;
+}
+
+/**
+ * Build a transfer file containing every template, every custom exercise
+ * (including renamed built-ins), and all exercise notes / rest timers.
+ * Output re-imports cleanly via importTemplatesJSON and is readable as-is.
+ */
+export async function exportTemplatesJSON(): Promise<string> {
+  const [templates, customExercises, notes, timers] = await Promise.all([
+    getTemplates(),
+    getCustomExercises(),
+    getExerciseNotes(),
+    getExerciseRestTimers(),
+  ]);
+
+  const nameOf = (id: string) => EXERCISE_MAP.get(id)?.name ?? id;
+
+  const file = {
+    ironforge: 'templates',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    customExercises: customExercises.map(e => ({
+      id: e.id,
+      name: e.name,
+      primaryMuscle: e.primaryMuscle,
+      secondaryMuscles: e.secondaryMuscles,
+      category: e.category,
+      force: e.force,
+    })),
+    templates: templates.map(t => {
+      // Turn internal superset ids into readable letters (A, B, C…) per template
+      const groupLabels = new Map<string, string>();
+      const sorted = [...t.exercises].sort((a, b) => a.order - b.order);
+      return {
+        name: t.name,
+        description: t.description,
+        icon: t.icon,
+        exercises: sorted.map(te => {
+          let supersetGroup: string | undefined;
+          if (te.supersetGroupId) {
+            if (!groupLabels.has(te.supersetGroupId)) {
+              groupLabels.set(te.supersetGroupId, String.fromCharCode(65 + groupLabels.size));
+            }
+            supersetGroup = groupLabels.get(te.supersetGroupId);
+          }
+          return {
+            exerciseId: te.exerciseId,
+            exercise: nameOf(te.exerciseId),
+            sets: te.sets,
+            ...(te.targetReps ? { targetReps: te.targetReps } : {}),
+            ...(te.targetWeight ? { targetWeight: te.targetWeight } : {}),
+            ...(supersetGroup ? { supersetGroup } : {}),
+            ...(te.notes ? { notes: te.notes } : {}),
+          };
+        }),
+      };
+    }),
+    exerciseNotes: Object.entries(notes).map(([exerciseId, note]) => ({
+      exerciseId,
+      exercise: nameOf(exerciseId),
+      note,
+    })),
+    restTimers: Object.entries(timers).map(([exerciseId, seconds]) => ({
+      exerciseId,
+      exercise: nameOf(exerciseId),
+      seconds,
+    })),
+  };
+
+  return JSON.stringify(file, null, 2);
 }

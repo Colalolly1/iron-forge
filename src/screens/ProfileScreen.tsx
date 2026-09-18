@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
-import { getProfile, saveProfile, getMeasurements, saveMeasurement, deleteMeasurement, getWorkouts, clearAllData, rebuildAllPRs, exportAllData, importAllData } from '../utils/storage';
+import { getProfile, saveProfile, getMeasurements, saveMeasurement, deleteMeasurement, getWorkouts, clearAllData, rebuildAllPRs, exportAllData, importAllData, getCustomExercises } from '../utils/storage';
 import { exportWorkoutsCSV, exportMeasurementsCSV, shareCSV, shareJSON, readPickedFile } from '../utils/export';
+import { exportTemplatesJSON } from '../utils/importTemplates';
+import { registerCustomExercises } from '../data/exercises';
 import { importStrongWorkouts } from '../utils/importStrong';
 import * as DocumentPicker from 'expo-document-picker';
 import { generateId } from '../utils/helpers';
@@ -435,6 +437,23 @@ export function ProfileScreen({ navigation }: any) {
           <Pressable
             onPress={async () => {
               try {
+                const json = await exportTemplatesJSON();
+                const date = new Date().toISOString().slice(0, 10);
+                await shareJSON(json, `ironforge-templates-${date}.json`);
+              } catch (e: any) {
+                Alert.alert('Export Failed', e.message || 'Could not export templates.');
+              }
+            }}
+            style={styles.toolRow}
+          >
+            <Ionicons name="albums-outline" size={22} color={Colors.accent} />
+            <Text style={styles.toolText}>Export Templates & Custom Exercises</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textTertiary} />
+          </Pressable>
+
+          <Pressable
+            onPress={async () => {
+              try {
                 const result = await DocumentPicker.getDocumentAsync({
                   type: ['text/csv', 'text/comma-separated-values', 'application/csv', '*/*'],
                   copyToCacheDirectory: true,
@@ -502,6 +521,8 @@ export function ProfileScreen({ navigation }: any) {
                       style: 'destructive',
                       onPress: async () => {
                         await importAllData(jsonContent);
+                        // Re-register restored custom exercises so templates resolve without an app restart
+                        registerCustomExercises(await getCustomExercises());
                         Alert.alert('Restore Complete', 'All data has been restored from backup.');
                         loadData();
                       },

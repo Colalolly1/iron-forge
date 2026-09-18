@@ -440,3 +440,24 @@ export async function saveExerciseRestTimer(exerciseId: string, seconds: number)
   timers[exerciseId] = seconds;
   await setJSON(KEYS.EXERCISE_REST_TIMERS, timers);
 }
+
+export async function getExerciseRestTimers(): Promise<Record<string, number>> {
+  return (await getJSON<Record<string, number>>(KEYS.EXERCISE_REST_TIMERS)) ?? {};
+}
+
+// Bulk merges used by template import — existing entries for other exercises are kept
+export async function mergeExerciseNotes(notes: Record<string, string>): Promise<void> {
+  const existing = await getExerciseNotes();
+  for (const [id, note] of Object.entries(notes)) {
+    if (note && note.trim()) existing[id] = note.trim();
+  }
+  await setJSON(KEYS.EXERCISE_NOTES, existing);
+}
+
+export async function mergeExerciseRestTimers(timers: Record<string, number>): Promise<void> {
+  const existing = await getExerciseRestTimers();
+  for (const [id, secs] of Object.entries(timers)) {
+    if (Number.isFinite(secs) && secs > 0) existing[id] = Math.round(secs);
+  }
+  await setJSON(KEYS.EXERCISE_REST_TIMERS, existing);
+}
