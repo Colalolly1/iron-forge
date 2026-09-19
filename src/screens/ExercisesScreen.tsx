@@ -119,7 +119,14 @@ export function ExercisesScreen({ navigation }: any) {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Exercises</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+            {navigation.canGoBack?.() && (
+              <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
+                <Ionicons name="chevron-back" size={26} color={Colors.text} />
+              </Pressable>
+            )}
+            <Text style={styles.title}>Exercises</Text>
+          </View>
           <Text style={styles.hint}>Long press to edit</Text>
         </View>
         <Pressable

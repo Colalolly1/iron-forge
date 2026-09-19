@@ -65,7 +65,14 @@ export function TemplatesScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Templates</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+            {navigation.canGoBack?.() && (
+              <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
+                <Ionicons name="chevron-back" size={26} color={Colors.text} />
+              </Pressable>
+            )}
+            <Text style={styles.title}>Templates</Text>
+          </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>

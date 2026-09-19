@@ -36,6 +36,7 @@ export function HomeScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [weekPRs, setWeekPRs] = useState<PersonalRecord[]>([]);
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [openTemplate, setOpenTemplate] = useState<string | null>(null);
   const [showWeekPRsModal, setShowWeekPRsModal] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -201,29 +202,60 @@ export function HomeScreen({ navigation }: any) {
           <>
             <Text style={styles.sectionTitle}>Start</Text>
             <Card style={styles.startCard}>
-              {templates.map((t, i) => (
-                <Pressable
-                  key={t.id}
-                  onPress={() => {
-                    startWorkout(t.name, exercisesFromTemplate(t));
-                    navigation.navigate('ActiveWorkout');
-                  }}
-                  style={({ pressed }) => [
-                    styles.startRow,
-                    i < templates.length && styles.startRowLine,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.startName}>{t.name}</Text>
-                    <Text style={styles.startMeta}>
-                      {t.exercises.length} exercises
-                      {t.estimatedDuration ? ` · ${t.estimatedDuration} min` : ''}
-                    </Text>
+              {templates.map(t => {
+                const open = openTemplate === t.id;
+                return (
+                  <View key={t.id} style={styles.startRowLine}>
+                    <Pressable
+                      onPress={() => setOpenTemplate(open ? null : t.id)}
+                      style={({ pressed }) => [styles.startRow, pressed && { opacity: 0.7 }]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.startName}>{t.name}</Text>
+                        <Text style={styles.startMeta} numberOfLines={open ? undefined : 1}>
+                          {t.exercises
+                            .map(te => EXERCISE_MAP.get(te.exerciseId)?.name ?? '?')
+                            .join(' · ')}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={open ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color={Colors.textSecondary}
+                      />
+                    </Pressable>
+                    {open && (
+                      <View style={styles.startDetail}>
+                        {t.exercises.map((te, i) => (
+                          <View key={`${te.exerciseId}-${i}`} style={styles.startExercise}>
+                            <Text style={styles.startExerciseName}>
+                              {EXERCISE_MAP.get(te.exerciseId)?.name ?? te.exerciseId}
+                            </Text>
+                            <Text style={styles.startExerciseSets}>{te.sets} sets</Text>
+                          </View>
+                        ))}
+                        <View style={styles.startActions}>
+                          <Pressable
+                            onPress={() => navigation.navigate('EditTemplate', { template: t })}
+                            hitSlop={8}
+                          >
+                            <Text style={styles.startEdit}>Edit</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => {
+                              startWorkout(t.name, exercisesFromTemplate(t));
+                              navigation.navigate('ActiveWorkout');
+                            }}
+                            style={({ pressed }) => [styles.startButton, pressed && { opacity: 0.8 }]}
+                          >
+                            <Text style={styles.startButtonText}>Start</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )}
                   </View>
-                  <Ionicons name="play" size={18} color={Colors.textSecondary} />
-                </Pressable>
-              ))}
+                );
+              })}
               <Pressable
                 onPress={handleStartWorkout}
                 style={({ pressed }) => [styles.startRow, pressed && { opacity: 0.7 }]}
@@ -505,6 +537,48 @@ const styles = StyleSheet.create({
     flex: 1,
     color: Colors.textSecondary,
     fontSize: FontSize.md,
+  },
+  startDetail: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
+    gap: Spacing.xs,
+  },
+  startExercise: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  startExerciseName: {
+    color: Colors.text,
+    fontSize: FontSize.sm,
+    flex: 1,
+  },
+  startExerciseSets: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
+    fontVariant: ['tabular-nums'],
+  },
+  startActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: Spacing.lg,
+    marginTop: Spacing.sm,
+  },
+  startEdit: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.md,
+  },
+  startButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  startButtonText: {
+    color: Colors.textInverse,
+    fontSize: FontSize.md,
+    fontWeight: '700',
   },
   activeBanner: {
     flexDirection: 'row',
