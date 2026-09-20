@@ -15,9 +15,7 @@ import { useWorkout } from '../context/WorkoutContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
-import { getWorkouts, getProfile, getPRs, getTemplates } from '../utils/storage';
-import { exercisesFromTemplate } from '../utils/startTemplate';
-import { EXERCISE_MAP } from '../data/exercises';
+import { getWorkouts, getProfile, getPRs } from '../utils/storage';
 import {
   formatDuration,
   formatWeight,
@@ -25,25 +23,23 @@ import {
   getRelativeTime,
   getWorkoutMuscleGroups,
 } from '../utils/helpers';
-import { Workout, UserProfile, WorkoutStats, MuscleGroup, PersonalRecord, WorkoutTemplate } from '../types';
+import { Workout, UserProfile, WorkoutStats, MuscleGroup, PersonalRecord } from '../types';
+import { EXERCISE_MAP } from '../data/exercises';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 export function HomeScreen({ navigation }: any) {
-  const { isWorkoutActive, startWorkout, activeWorkout } = useWorkout();
+  const { isWorkoutActive, activeWorkout } = useWorkout();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<WorkoutStats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [weekPRs, setWeekPRs] = useState<PersonalRecord[]>([]);
-  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
-  const [openTemplate, setOpenTemplate] = useState<string | null>(null);
   const [showWeekPRsModal, setShowWeekPRsModal] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [ws, p, prs, ts] = await Promise.all([getWorkouts(), getProfile(), getPRs(), getTemplates()]);
+    const [ws, p, prs] = await Promise.all([getWorkouts(), getProfile(), getPRs()]);
     setWorkouts(ws);
     setProfile(p);
-    setTemplates(ts);
 
     // Calculate stats
     const now = new Date();
@@ -138,15 +134,6 @@ export function HomeScreen({ navigation }: any) {
     setRefreshing(false);
   };
 
-  const handleStartWorkout = () => {
-    if (isWorkoutActive) {
-      navigation.navigate('ActiveWorkout');
-    } else {
-      startWorkout();
-      navigation.navigate('ActiveWorkout');
-    }
-  };
-
   const recentWorkouts = workouts.slice(0, 5);
   const unit = profile?.weightUnit ?? 'lbs';
 
@@ -197,80 +184,10 @@ export function HomeScreen({ navigation }: any) {
           </Pressable>
         )}
 
-        {/* Start: your templates first, since that is how a workout begins. */}
-        {!isWorkoutActive && (
-          <>
-            <Text style={styles.sectionTitle}>Start</Text>
-            <Card style={styles.startCard}>
-              {templates.map(t => {
-                const open = openTemplate === t.id;
-                return (
-                  <View key={t.id} style={styles.startRowLine}>
-                    <Pressable
-                      onPress={() => setOpenTemplate(open ? null : t.id)}
-                      style={({ pressed }) => [styles.startRow, pressed && { opacity: 0.7 }]}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.startName}>{t.name}</Text>
-                        <Text style={styles.startMeta} numberOfLines={open ? undefined : 1}>
-                          {t.exercises
-                            .map(te => EXERCISE_MAP.get(te.exerciseId)?.name ?? '?')
-                            .join(' · ')}
-                        </Text>
-                      </View>
-                      <Ionicons
-                        name={open ? 'chevron-up' : 'chevron-down'}
-                        size={18}
-                        color={Colors.textSecondary}
-                      />
-                    </Pressable>
-                    {open && (
-                      <View style={styles.startDetail}>
-                        {t.exercises.map((te, i) => (
-                          <View key={`${te.exerciseId}-${i}`} style={styles.startExercise}>
-                            <Text style={styles.startExerciseName}>
-                              {EXERCISE_MAP.get(te.exerciseId)?.name ?? te.exerciseId}
-                            </Text>
-                            <Text style={styles.startExerciseSets}>{te.sets} sets</Text>
-                          </View>
-                        ))}
-                        <View style={styles.startActions}>
-                          <Pressable
-                            onPress={() => navigation.navigate('EditTemplate', { template: t })}
-                            hitSlop={8}
-                          >
-                            <Text style={styles.startEdit}>Edit</Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => {
-                              startWorkout(t.name, exercisesFromTemplate(t));
-                              navigation.navigate('ActiveWorkout');
-                            }}
-                            style={({ pressed }) => [styles.startButton, pressed && { opacity: 0.8 }]}
-                          >
-                            <Text style={styles.startButtonText}>Start</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-              <Pressable
-                onPress={handleStartWorkout}
-                style={({ pressed }) => [styles.startRow, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.startEmpty}>Empty workout</Text>
-                <Ionicons name="add" size={18} color={Colors.textSecondary} />
-              </Pressable>
-            </Card>
-          </>
-        )}
-
         {/* Stats Cards */}
         {stats && stats.totalWorkouts > 0 && (
           <>
-            <Text style={styles.sectionTitle}>This Week</Text>
+            <Text style={[styles.sectionTitle, styles.firstSection]}>This Week</Text>
             <View style={styles.statsGrid}>
               <StatCard
                 label="Workouts"
@@ -509,77 +426,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: '500',
   },
-  startCard: {
-    padding: 0,
-    overflow: 'hidden',
-  },
-  startRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-  },
-  startRowLine: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  startName: {
-    color: Colors.text,
-    fontSize: FontSize.md,
-    fontWeight: '600',
-  },
-  startMeta: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.xs,
-    marginTop: 2,
-  },
-  startEmpty: {
-    flex: 1,
-    color: Colors.textSecondary,
-    fontSize: FontSize.md,
-  },
-  startDetail: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-    gap: Spacing.xs,
-  },
-  startExercise: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  startExerciseName: {
-    color: Colors.text,
-    fontSize: FontSize.sm,
-    flex: 1,
-  },
-  startExerciseSets: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.sm,
-    fontVariant: ['tabular-nums'],
-  },
-  startActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: Spacing.lg,
-    marginTop: Spacing.sm,
-  },
-  startEdit: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.md,
-  },
-  startButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-  },
-  startButtonText: {
-    color: Colors.textInverse,
-    fontSize: FontSize.md,
-    fontWeight: '700',
-  },
   activeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -606,6 +452,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  firstSection: {
+    marginTop: 4,
   },
   sectionTitle: {
     color: Colors.text,
