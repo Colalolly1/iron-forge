@@ -24,7 +24,7 @@ import {
   formatWeight,
   calculateVolume,
 } from '../utils/helpers';
-import { UserProfile } import React, { useState, useEffect, useRef, useCallback, createRef } from 'react';
+import { UserProfile, PersonalRecord } from '../types';
 import {
   View,
   Text,
