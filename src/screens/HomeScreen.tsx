@@ -15,7 +15,9 @@ import { useWorkout } from '../context/WorkoutContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
-import { getWorkouts, getProfile, getPRs } from '../utils/storage';
+import { getWorkouts, getProfile, getPRs, getTemplates } from '../utils/storage';
+import { exercisesFromTemplate } from '../utils/startTemplate';
+import { startOrReplace } from '../utils/startFlow';
 import {
   formatDuration,
   formatWeight,
@@ -23,12 +25,14 @@ import {
   getRelativeTime,
   getWorkoutMuscleGroups,
 } from '../utils/helpers';
-import { Workout, UserProfile, WorkoutStats, MuscleGroup, PersonalRecord } from '../types';
+import { Workout, UserProfile, WorkoutStats, MuscleGroup, PersonalRecord, WorkoutTemplate } from '../types';
 import { EXERCISE_MAP } from '../data/exercises';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 export function HomeScreen({ navigation }: any) {
-  const { isWorkoutActive, activeWorkout } = useWorkout();
+  const { isWorkoutActive, activeWorkout, startWorkout, discardWorkout } = useWorkout();
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [showStart, setShowStart] = useState(false);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<WorkoutStats | null>(null);
@@ -37,7 +41,8 @@ export function HomeScreen({ navigation }: any) {
   const [showWeekPRsModal, setShowWeekPRsModal] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [ws, p, prs] = await Promise.all([getWorkouts(), getProfile(), getPRs()]);
+    const [ws, p, prs, ts] = await Promise.all([getWorkouts(), getProfile(), getPRs(), getTemplates()]);
+    setTemplates(ts);
     setWorkouts(ws);
     setProfile(p);
 
@@ -184,6 +189,23 @@ export function HomeScreen({ navigation }: any) {
           </Pressable>
         )}
 
+        {/* Start: one button, then choose a template or go empty. */}
+        {!isWorkoutActive && (
+          <Pressable
+            onPress={() => setShowStart(true)}
+            style={({ pressed }) => [styles.startButton, pressed && { opacity: 0.85 }]}
+          >
+            <Ionicons name="barbell" size={22} color={Colors.textInverse} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.startTitle}>Start a workout</Text>
+              <Text style={styles.startHint}>
+                {templates.length > 0 ? `${templates.length} template${templates.length === 1 ? '' : 's'} · or start empty` : 'Start empty, or make a template'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color={Colors.textInverse} />
+          </Pressable>
+        )}
+
         {/* Stats Cards */}
         {stats && stats.totalWorkouts > 0 && (
           <>
@@ -256,6 +278,65 @@ export function HomeScreen({ navigation }: any) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Start sheet */}
+      <Modal visible={showStart} transparent animationType="none" onRequestClose={() => setShowStart(false)}>
+        <Pressable style={sheetStyles.scrim} onPress={() => setShowStart(false)}>
+          <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+            <View style={sheetStyles.handleRow}>
+              <Text style={sheetStyles.title}>Start</Text>
+              <Pressable onPress={() => setShowStart(false)} hitSlop={10}>
+                <Text style={sheetStyles.close}>Close</Text>
+              </Pressable>
+            </View>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {templates.map(t => (
+                <Pressable
+                  key={t.id}
+                  onPress={() => {
+                    setShowStart(false);
+                    startOrReplace({
+                      isWorkoutActive,
+                      discardWorkout,
+                      navigation,
+                      start: () => startWorkout(t.name, exercisesFromTemplate(t)),
+                    });
+                  }}
+                  style={({ pressed }) => [sheetStyles.row, pressed && { opacity: 0.7 }]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={sheetStyles.rowTitle}>{t.name}</Text>
+                    <Text style={sheetStyles.rowMeta} numberOfLines={1}>
+                      {t.exercises.map(te => EXERCISE_MAP.get(te.exerciseId)?.name ?? '?').join(' · ')}
+                    </Text>
+                  </View>
+                  <Text style={sheetStyles.rowGo}>Start</Text>
+                </Pressable>
+              ))}
+              <Pressable
+                onPress={() => {
+                  setShowStart(false);
+                  startOrReplace({ isWorkoutActive, discardWorkout, navigation, start: () => startWorkout() });
+                }}
+                style={({ pressed }) => [sheetStyles.row, pressed && { opacity: 0.7 }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={sheetStyles.rowTitle}>Empty workout</Text>
+                  <Text style={sheetStyles.rowMeta}>Add exercises as you go</Text>
+                </View>
+                <Text style={sheetStyles.rowGo}>Start</Text>
+              </Pressable>
+            </ScrollView>
+            <Pressable
+              onPress={() => { setShowStart(false); navigation.navigate('Templates'); }}
+              style={sheetStyles.manage}
+              hitSlop={8}
+            >
+              <Text style={sheetStyles.manageText}>Manage templates</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* This Week's PRs Modal */}
       <Modal
@@ -425,6 +506,25 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: FontSize.md,
     fontWeight: '500',
+  },
+  startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.md + 2,
+    paddingHorizontal: Spacing.md,
+  },
+  startTitle: {
+    color: Colors.textInverse,
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+  },
+  startHint: {
+    color: 'rgba(0,0,0,0.6)',
+    fontSize: FontSize.sm,
+    marginTop: 2,
   },
   activeBanner: {
     flexDirection: 'row',
@@ -646,4 +746,51 @@ const modalStyles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontWeight: '600',
   },
+});
+
+const sheetStyles = StyleSheet.create({
+  scrim: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: Colors.bgCard,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    borderTopWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xl,
+  },
+  handleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  title: { color: Colors.text, fontSize: FontSize.xl, fontWeight: '700' },
+  close: { color: Colors.textSecondary, fontSize: FontSize.md },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  rowTitle: { color: Colors.text, fontSize: FontSize.md, fontWeight: '600' },
+  rowMeta: { color: Colors.textSecondary, fontSize: FontSize.sm, marginTop: 2 },
+  rowGo: {
+    color: Colors.textInverse,
+    backgroundColor: Colors.primary,
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  manage: { paddingTop: Spacing.md, alignItems: 'center' },
+  manageText: { color: Colors.textSecondary, fontSize: FontSize.sm, textDecorationLine: 'underline' },
 });

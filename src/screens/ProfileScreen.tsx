@@ -482,7 +482,7 @@ export function ProfileScreen({ navigation }: any) {
 
         {/* Data Tools */}
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>Data Tools</Text>
+          <Text style={styles.sectionTitle}>Backup</Text>
 
           <Pressable
             onPress={async () => {
@@ -555,7 +555,7 @@ export function ProfileScreen({ navigation }: any) {
 
         {/* Danger Zone */}
         <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>Danger Zone</Text>
+          <Text style={styles.sectionTitle}>Reset</Text>
           <Pressable
             onPress={() => {
               const doDelete = async () => {
@@ -621,8 +621,8 @@ const styles = StyleSheet.create({
   content: { padding: Spacing.md, gap: Spacing.md },
   title: {
     color: Colors.text,
-    fontSize: FontSize.xxxl,
-    fontWeight: '800',
+    fontSize: FontSize.xl,
+    fontWeight: '700',
   },
   section: {
     gap: Spacing.md,
@@ -633,9 +633,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionTitle: {
-    color: Colors.text,
-    fontSize: FontSize.lg,
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
     fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   field: {
     gap: Spacing.xs,
@@ -643,7 +645,7 @@ const styles = StyleSheet.create({
   label: {
     color: Colors.text,
     fontSize: FontSize.md,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   sublabel: {
     color: Colors.textSecondary,
@@ -741,7 +743,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md - 2,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
@@ -749,6 +751,6 @@ const styles = StyleSheet.create({
     flex: 1,
     color: Colors.text,
     fontSize: FontSize.md,
-    fontWeight: '600',
+    fontWeight: '500',
   },
 });

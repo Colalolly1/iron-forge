@@ -14,6 +14,7 @@ import { Card } from '../components/Card';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
 import { Button } from '../components/Button';
 import { useWorkout } from '../context/WorkoutContext';
+import { startOrReplace } from '../utils/startFlow';
 import { getTemplates, saveTemplate, deleteTemplate, getProfile } from '../utils/storage';
 import { importTemplatesJSON } from '../utils/importTemplates';
 import { readPickedFile } from '../utils/export';
@@ -30,7 +31,7 @@ import { WorkoutTemplate, WorkoutExercise } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 export function TemplatesScreen({ navigation }: any) {
-  const { startWorkout, isWorkoutActive } = useWorkout();
+  const { startWorkout, isWorkoutActive, discardWorkout } = useWorkout();
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
 
   const loadData = useCallback(async () => {
@@ -52,14 +53,8 @@ export function TemplatesScreen({ navigation }: any) {
   }, [loadData, navigation]);
 
   const handleStartFromTemplate = (template: WorkoutTemplate) => {
-    if (isWorkoutActive) {
-      Alert.alert('Workout in progress', 'Finish or discard your current workout first.');
-      return;
-    }
-
     const exercises = exercisesFromTemplate(template);
-    startWorkout(template.name, exercises);
-    navigation.navigate('ActiveWorkout');
+    startOrReplace({ isWorkoutActive, discardWorkout, navigation, start: () => startWorkout(template.name, exercises) });
   };
 
   return (
@@ -79,14 +74,7 @@ export function TemplatesScreen({ navigation }: any) {
         {/* Quick Start */}
         <Button
           title="Empty Workout"
-          onPress={() => {
-            if (isWorkoutActive) {
-              navigation.navigate('ActiveWorkout');
-            } else {
-              startWorkout();
-              navigation.navigate('ActiveWorkout');
-            }
-          }}
+          onPress={() => startOrReplace({ isWorkoutActive, discardWorkout, navigation, start: () => startWorkout() })}
           size="lg"
           fullWidth
           icon={<Ionicons name="flash" size={20} color={Colors.textInverse} />}

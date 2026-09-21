@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../components/Card';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
 import { useWorkout } from '../context/WorkoutContext';
+import { startOrReplace } from '../utils/startFlow';
 import { getWorkouts, deleteWorkout, getProfile, saveWorkout } from '../utils/storage';
 import {
   formatDuration,
@@ -29,7 +30,7 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 export function WorkoutDetailScreen({ route, navigation }: any) {
   const { workoutId } = route.params;
-  const { startWorkout, isWorkoutActive } = useWorkout();
+  const { startWorkout, isWorkoutActive, discardWorkout } = useWorkout();
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [editing, setEditing] = useState(false);
@@ -48,10 +49,6 @@ export function WorkoutDetailScreen({ route, navigation }: any) {
 
   const handleRepeat = () => {
     if (!workout) return;
-    if (isWorkoutActive) {
-      Alert.alert('Workout in progress', 'Finish or discard your current workout first.');
-      return;
-    }
     const exercises: WorkoutExercise[] = workout.exercises.map((we, i) => ({
       id: generateId(),
       exerciseId: we.exerciseId,
@@ -66,8 +63,12 @@ export function WorkoutDetailScreen({ route, navigation }: any) {
       notes: we.notes,
       order: i,
     }));
-    startWorkout(workout.name, exercises);
-    navigation.navigate('ActiveWorkout');
+    startOrReplace({
+      isWorkoutActive,
+      discardWorkout,
+      navigation,
+      start: () => startWorkout(workout.name, exercises),
+    });
   };
 
   const handleDelete = async () => {
