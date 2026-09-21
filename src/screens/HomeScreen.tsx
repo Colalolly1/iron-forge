@@ -15,7 +15,9 @@ import { useWorkout } from '../context/WorkoutContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
-import { getWorkouts, getProfile, getPRs, getTemplates } from '../utils/storage';
+import { getWorkouts, getProfile, getPRs, getTemplates, getPlanOverrides, setPlanOverride, saveTemplate } from '../utils/storage';
+import { PlanOverrides, REST, dateKey, planFor } from '../utils/plan';
+import { PlanSheet } from '../components/PlanSheet';
 import { exercisesFromTemplate } from '../utils/startTemplate';
 import { startOrReplace } from '../utils/startFlow';
 import { WeekStrip } from '../components/WeekStrip';
@@ -34,6 +36,8 @@ export function HomeScreen({ navigation }: any) {
   const { isWorkoutActive, activeWorkout, startWorkout, discardWorkout } = useWorkout();
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [showStart, setShowStart] = useState(false);
+  const [overrides, setOverrides] = useState<PlanOverrides>({});
+  const [picking, setPicking] = useState<Date | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<WorkoutStats | null>(null);
@@ -42,8 +46,9 @@ export function HomeScreen({ navigation }: any) {
   const [showWeekPRsModal, setShowWeekPRsModal] = useState(false);
 
   const loadData = useCallback(async () => {
-    const [ws, p, prs, ts] = await Promise.all([getWorkouts(), getProfile(), getPRs(), getTemplates()]);
+    const [ws, p, prs, ts, ov] = await Promise.all([getWorkouts(), getProfile(), getPRs(), getTemplates(), getPlanOverrides()]);
     setTemplates(ts);
+    setOverrides(ov);
     setWorkouts(ws);
     setProfile(p);
 
@@ -208,10 +213,16 @@ export function HomeScreen({ navigation }: any) {
         )}
 
         {/* This week: the plan as seven dots, then the numbers. */}
-        <Text style={[styles.sectionTitle, styles.firstSection]}>This Week</Text>
+        <View style={[styles.sectionHeader, styles.firstSection]}>
+          <Text style={styles.sectionTitle}>This Week</Text>
+          <Pressable onPress={() => navigation.navigate('Plan')} hitSlop={8}>
+            <Text style={styles.seeAll}>Plan</Text>
+          </Pressable>
+        </View>
         <WeekStrip
           templates={templates}
           workouts={workouts}
+          overrides={overrides}
           startOfWeek={profile?.startOfWeek === 1 ? 1 : 0}
           onStart={t => startOrReplace({
             isWorkoutActive,
@@ -219,7 +230,7 @@ export function HomeScreen({ navigation }: any) {
             navigation,
             start: () => startWorkout(t.name, exercisesFromTemplate(t)),
           })}
-          onPlan={() => navigation.navigate('Templates')}
+          onPickDay={d => setPicking(d)}
         />
         {stats && stats.totalWorkouts > 0 && (
           <>
@@ -291,6 +302,41 @@ export function HomeScreen({ navigation }: any) {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <PlanSheet
+        date={picking}
+        templates={templates}
+        current={picking ? planFor(picking, templates, overrides) : null}
+        onClose={() => setPicking(null)}
+        onPick={async (t, everyWeek) => {
+          if (!picking) return;
+          if (everyWeek) {
+            const dow = picking.getDay();
+            for (const other of templates) {
+              const has = (other.days ?? []).includes(dow);
+              if (other.id === t.id && !has) await saveTemplate({ ...other, days: [...(other.days ?? []), dow] });
+              if (other.id !== t.id && has) await saveTemplate({ ...other, days: (other.days ?? []).filter(x => x !== dow) });
+            }
+            await setPlanOverride(dateKey(picking), null);
+          } else {
+            await setPlanOverride(dateKey(picking), t.id);
+          }
+          setPicking(null);
+          loadData();
+        }}
+        onRest={async everyWeek => {
+          if (!picking) return;
+          if (everyWeek) {
+            const dow = picking.getDay();
+            for (const t of templates) if ((t.days ?? []).includes(dow)) await saveTemplate({ ...t, days: (t.days ?? []).filter(x => x !== dow) });
+            await setPlanOverride(dateKey(picking), null);
+          } else {
+            await setPlanOverride(dateKey(picking), REST);
+          }
+          setPicking(null);
+          loadData();
+        }}
+      />
 
       {/* Start sheet */}
       <Modal visible={showStart} transparent animationType="none" onRequestClose={() => setShowStart(false)}>

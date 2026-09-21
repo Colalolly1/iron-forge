@@ -11,6 +11,7 @@ import {
 const KEYS = {
   WORKOUTS: '@ironforge/workouts',
   TEMPLATES: '@ironforge/templates',
+  PLAN: '@ironforge/plan',
   PRS: '@ironforge/prs',
   MEASUREMENTS: '@ironforge/measurements',
   PROFILE: '@ironforge/profile',
@@ -36,6 +37,20 @@ async function setJSON(key: string, data: unknown): Promise<void> {
 }
 
 // ─── Workouts ────────────────────────────────────────────────
+
+// ─── Weekly plan overrides ───────────────────────────────────
+// Keyed by local date "YYYY-MM-DD". Value is a template id, or "rest" to
+// clear a day that the weekly pattern would otherwise fill.
+export async function getPlanOverrides(): Promise<Record<string, string>> {
+  return (await getJSON<Record<string, string>>(KEYS.PLAN)) ?? {};
+}
+
+export async function setPlanOverride(dateKey: string, value: string | null): Promise<void> {
+  const all = await getPlanOverrides();
+  if (value === null) delete all[dateKey];
+  else all[dateKey] = value;
+  await setJSON(KEYS.PLAN, all);
+}
 
 export async function getWorkouts(): Promise<Workout[]> {
   return (await getJSON<Workout[]>(KEYS.WORKOUTS)) ?? [];

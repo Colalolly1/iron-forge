@@ -11,6 +11,7 @@ import { WorkoutProvider } from './src/context/WorkoutContext';
 import { getCustomExercises } from './src/utils/storage';
 import { registerCustomExercises } from './src/data/exercises';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { PlanScreen } from './src/screens/PlanScreen';
 import { ActiveWorkoutScreen } from './src/screens/ActiveWorkoutScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 import { ExercisesScreen } from './src/screens/ExercisesScreen';
@@ -117,6 +118,7 @@ export default function App() {
           >
             <Stack.Screen name="Tabs" component={TabNavigator} />
             <Stack.Screen name="Templates" component={TemplatesScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Plan" component={PlanScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="Exercises" component={ExercisesScreen} options={{ animation: 'slide_from_right' }} />
             <Stack.Screen
               name="ActiveWorkout"
