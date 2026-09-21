@@ -16,6 +16,7 @@ import { Button } from '../components/Button';
 import { useWorkout } from '../context/WorkoutContext';
 import { startOrReplace } from '../utils/startFlow';
 import { getTemplates, saveTemplate, deleteTemplate, getProfile } from '../utils/storage';
+import { DAY_LETTERS } from '../utils/plan';
 import { importTemplatesJSON } from '../utils/importTemplates';
 import { readPickedFile } from '../utils/export';
 import * as DocumentPicker from 'expo-document-picker';
@@ -205,6 +206,32 @@ export function TemplatesScreen({ navigation }: any) {
                 )}
               </View>
 
+              {/* Weekly plan: which days this one belongs to. */}
+              <View style={styles.planRow}>
+                <Text style={styles.planLabel}>Days</Text>
+                <View style={styles.dayChips}>
+                  {[1, 2, 3, 4, 5, 6, 0].map(d => {
+                    const on = (template.days ?? []).includes(d);
+                    return (
+                      <Pressable
+                        key={d}
+                        hitSlop={4}
+                        onPress={async () => {
+                          const days = on
+                            ? (template.days ?? []).filter(x => x !== d)
+                            : [...(template.days ?? []), d];
+                          await saveTemplate({ ...template, days });
+                          loadData();
+                        }}
+                        style={[styles.dayChip, on && styles.dayChipOn]}
+                      >
+                        <Text style={[styles.dayChipText, on && styles.dayChipTextOn]}>{DAY_LETTERS[d]}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
               <View style={styles.templateButtonRow}>
                 <Pressable
                   onPress={() => handleStartFromTemplate(template)}
@@ -308,9 +335,9 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
   },
   exerciseNote: {
-    color: Colors.textTertiary,
+    color: Colors.textSecondary,
     fontSize: FontSize.xs,
-    fontStyle: 'italic',
+    
     marginLeft: Spacing.sm,
   },
   exerciseSupersetRow: {
@@ -328,6 +355,27 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     flexWrap: 'wrap',
   },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  planLabel: { color: Colors.textSecondary, fontSize: FontSize.sm, fontWeight: '600', width: 36 },
+  dayChips: { flexDirection: 'row', gap: 6, flex: 1, justifyContent: 'space-between' },
+  dayChip: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayChipOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  dayChipText: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '700' },
+  dayChipTextOn: { color: Colors.textInverse },
   templateButtonRow: {
     flexDirection: 'row',
     gap: Spacing.sm,

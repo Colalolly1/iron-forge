@@ -66,7 +66,7 @@ export function exportMeasurementsCSV(
 
   const rows = measurements.map(m => {
     return [
-      new Date(m.date).toLocaleDateString(),
+      new Date(m.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
       m.weight ?? '',
       m.bodyFat ?? '',
       m.chest ?? '',

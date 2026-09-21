@@ -251,7 +251,7 @@ export function WorkoutDetailScreen({ route, navigation }: any) {
         <View style={styles.overview}>
           <Text style={styles.name}>{displayWorkout.name}</Text>
           <Text style={styles.date}>
-            {date.toLocaleDateString('en-US', {
+            {date.toLocaleDateString('en-GB', {
               weekday: 'long',
               month: 'long',
               day: 'numeric',
@@ -259,7 +259,7 @@ export function WorkoutDetailScreen({ route, navigation }: any) {
             })}
           </Text>
           <Text style={styles.time}>
-            {date.toLocaleTimeString('en-US', {
+            {date.toLocaleTimeString('en-GB', {
               hour: 'numeric',
               minute: '2-digit',
             })}

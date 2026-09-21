@@ -42,7 +42,7 @@ function WorkoutRow({ workout: w, unit, navigation }: { workout: Workout; unit: 
       <View style={histStyles.dateCol}>
         <Text style={histStyles.day}>{d.getDate()}</Text>
         <Text style={histStyles.weekday}>
-          {d.toLocaleDateString('en-US', { weekday: 'short' })}
+          {d.toLocaleDateString('en-GB', { weekday: 'short' })}
         </Text>
         <Text style={histStyles.time}>{time}</Text>
       </View>
@@ -93,7 +93,7 @@ export function HistoryScreen({ navigation }: any) {
     const groups: Record<string, Workout[]> = {};
     newestFirst.forEach(w => {
       const d = new Date(w.startTime);
-      const key = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const key = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
       if (!groups[key]) groups[key] = [];
       groups[key].push(w);
     });
@@ -150,7 +150,7 @@ export function HistoryScreen({ navigation }: any) {
     return days;
   }, [calendarMonth, workoutsByDate]);
 
-  const monthLabel = calendarMonth.toLocaleDateString('en-US', {
+  const monthLabel = calendarMonth.toLocaleDateString('en-GB', {
     month: 'long',
     year: 'numeric',
   });

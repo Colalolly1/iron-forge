@@ -335,7 +335,7 @@ export function ProfileScreen({ navigation }: any) {
             <View key={m.id} style={styles.measurementRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.measurementDate}>
-                  {new Date(m.date).toLocaleDateString()}
+                  {new Date(m.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </Text>
                 <View style={styles.measurementValues}>
                   {m.weight && (
@@ -626,6 +626,7 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: Spacing.md,
+    paddingVertical: Spacing.md + 2,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -666,6 +667,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    rowGap: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   segmented: {
     flexDirection: 'row',

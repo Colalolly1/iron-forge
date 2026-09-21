@@ -75,11 +75,11 @@ export function getRelativeTime(dateStr: string): string {
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
   if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return date.toLocaleDateString();
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function getWeekday(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short' });
+  return new Date(dateStr).toLocaleDateString('en-GB', { weekday: 'short' });
 }
 
 export function isSameDay(d1: string, d2: string): boolean {

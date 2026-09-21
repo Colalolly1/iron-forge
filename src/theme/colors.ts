@@ -34,8 +34,8 @@ export const Colors = {
   textInverse: '#000000',
 
   // Borders
-  border: '#222222',
-  borderLight: '#333333',
+  border: '#3A3A3A',
+  borderLight: '#555555',
 
   // Muscle group colors — all same gray (no color on e-ink)
   chest: '#BBBBBB',

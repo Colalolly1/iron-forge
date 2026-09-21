@@ -102,6 +102,8 @@ export interface WorkoutTemplate {
   icon?: string;
   lastUsed?: string;
   timesUsed: number;
+  /** Weekly plan: days of the week this template is meant for (0 = Sunday … 6 = Saturday). */
+  days?: number[];
   createdAt: string;
   isCustom?: boolean;
 }

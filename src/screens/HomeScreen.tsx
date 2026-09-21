@@ -18,6 +18,7 @@ import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
 import { getWorkouts, getProfile, getPRs, getTemplates } from '../utils/storage';
 import { exercisesFromTemplate } from '../utils/startTemplate';
 import { startOrReplace } from '../utils/startFlow';
+import { WeekStrip } from '../components/WeekStrip';
 import {
   formatDuration,
   formatWeight,
@@ -206,10 +207,22 @@ export function HomeScreen({ navigation }: any) {
           </Pressable>
         )}
 
-        {/* Stats Cards */}
+        {/* This week: the plan as seven dots, then the numbers. */}
+        <Text style={[styles.sectionTitle, styles.firstSection]}>This Week</Text>
+        <WeekStrip
+          templates={templates}
+          workouts={workouts}
+          startOfWeek={profile?.startOfWeek === 1 ? 1 : 0}
+          onStart={t => startOrReplace({
+            isWorkoutActive,
+            discardWorkout,
+            navigation,
+            start: () => startWorkout(t.name, exercisesFromTemplate(t)),
+          })}
+          onPlan={() => navigation.navigate('Templates')}
+        />
         {stats && stats.totalWorkouts > 0 && (
           <>
-            <Text style={[styles.sectionTitle, styles.firstSection]}>This Week</Text>
             <View style={styles.statsGrid}>
               <StatCard
                 label="Workouts"
@@ -234,7 +247,7 @@ export function HomeScreen({ navigation }: any) {
                 label="PRs"
                 value={String(stats.prsThisMonth)}
                 icon="trophy"
-                color="#FFD700"
+                color={Colors.primary}
                 onPress={() => setShowWeekPRsModal(true)}
               />
             </View>
@@ -349,7 +362,7 @@ export function HomeScreen({ navigation }: any) {
           <View style={modalStyles.sheet}>
             <View style={modalStyles.header}>
               <View style={modalStyles.headerLeft}>
-                <Ionicons name="trophy" size={22} color="#FFD700" />
+                <Ionicons name="trophy" size={22} color={Colors.primary} />
                 <Text style={modalStyles.title}>This Week's PRs</Text>
               </View>
               <Pressable onPress={() => setShowWeekPRsModal(false)} hitSlop={8}>

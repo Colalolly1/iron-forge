@@ -291,7 +291,7 @@ export function StatsScreen({ navigation }: any) {
                         <View style={styles.prDetailChip}>
                           <Ionicons name="calendar-outline" size={12} color={Colors.textSecondary} />
                           <Text style={styles.prDetailText}>
-                            {new Date(group.date).toLocaleDateString()}
+                            {new Date(group.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </Text>
                         </View>
                       ) : null}
@@ -470,10 +470,10 @@ export function StatsScreen({ navigation }: any) {
                       {points.length > 0 && (
                         <>
                           <SvgText x={0} y={chartH - 4} fill={Colors.textTertiary} fontSize={10}>
-                            {new Date(points[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {new Date(points[0].date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
                           </SvgText>
                           <SvgText x={chartW} y={chartH - 4} fill={Colors.textTertiary} fontSize={10} textAnchor="end">
-                            {new Date(points[points.length - 1].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            {new Date(points[points.length - 1].date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}
                           </SvgText>
                         </>
                       )}
@@ -486,7 +486,7 @@ export function StatsScreen({ navigation }: any) {
                     {weightEntries.slice().reverse().slice(0, 20).map(m => (
                       <View key={m.id} style={weightStyles.histRow}>
                         <Text style={weightStyles.histDate}>
-                          {new Date(m.date).toLocaleDateString('en-US', {
+                          {new Date(m.date).toLocaleDateString('en-GB', {
                             month: 'short', day: 'numeric', year: 'numeric',
                           })}
                         </Text>
