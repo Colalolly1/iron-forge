@@ -19,7 +19,7 @@ import { getWorkouts, getProfile, getPRs, getTemplates, getPlanOverrides } from 
 import { PlanOverrides, dateKey, planFor, plannedOn } from '../utils/plan';
 import { planDay, backToWeekly } from '../utils/planActions';
 import { PlanSheet } from '../components/PlanSheet';
-import { exercisesFromTemplate, toPickFromTemplate, templateLine } from '../utils/startTemplate';
+import { exercisesFromTemplate, targetsFromTemplate, templateLine } from '../utils/startTemplate';
 import { startOrReplace } from '../utils/startFlow';
 import { WeekStrip } from '../components/WeekStrip';
 import {
@@ -229,7 +229,7 @@ export function HomeScreen({ navigation }: any) {
             isWorkoutActive,
             discardWorkout,
             navigation,
-            start: () => startWorkout(t.name, exercisesFromTemplate(t), toPickFromTemplate(t)),
+            start: () => startWorkout(t.name, exercisesFromTemplate(t), targetsFromTemplate(t)),
           })}
           onPickDay={d => setPicking(d)}
         />
@@ -345,7 +345,7 @@ export function HomeScreen({ navigation }: any) {
                       isWorkoutActive,
                       discardWorkout,
                       navigation,
-                      start: () => startWorkout(t.name, exercisesFromTemplate(t), toPickFromTemplate(t)),
+                      start: () => startWorkout(t.name, exercisesFromTemplate(t), targetsFromTemplate(t)),
                     });
                   }}
                   style={({ pressed }) => [sheetStyles.row, pressed && { opacity: 0.7 }]}

@@ -13,15 +13,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
-import { EXERCISE_MAP, MUSCLE_GROUP_LABELS } from '../data/exercises';
+import { EXERCISE_MAP } from '../data/exercises';
+import { BODY_PARTS, BODY_PART_LABELS, muscleOfPart } from '../utils/bodyParts';
 import { saveTemplate, getExerciseRestTimer, saveExerciseRestTimer } from '../utils/storage';
 import { generateId } from '../utils/helpers';
-import { WorkoutTemplate, Exercise, MuscleGroup, BodyPartSlot } from '../types';
-
-const BODY_PARTS: MuscleGroup[] = [
-  'chest', 'back', 'shoulders', 'biceps', 'triceps',
-  'quads', 'hamstrings', 'glutes', 'calves', 'core',
-];
+import { WorkoutTemplate, Exercise, MuscleGroup, BodyPartTarget } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 const TEMPLATE_COLORS = [
@@ -68,7 +64,11 @@ export function EditTemplateScreen({ navigation, route }: any) {
       };
     });
   });
-  const [bodyParts, setBodyParts] = useState<BodyPartSlot[]>(existingTemplate?.bodyParts ?? []);
+  /** 'targets' templates have no fixed exercises: body-part targets chosen on the day. */
+  const kind: 'fixed' | 'targets' = existingTemplate?.kind ?? route.params?.kind ?? 'fixed';
+  const [targets, setTargets] = useState<BodyPartTarget[]>(existingTemplate?.targets ?? []);
+  const updateTarget = (i: number, patch: Partial<BodyPartTarget>) =>
+    setTargets(prev => prev.map((t, j) => (j === i ? { ...t, ...patch } : t)));
   const [showPicker, setShowPicker] = useState(false);
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
 
@@ -139,8 +139,12 @@ export function EditTemplateScreen({ navigation, route }: any) {
       Alert.alert('Missing Name', 'Please enter a template name.');
       return;
     }
-    if (exercises.length === 0 && bodyParts.length === 0) {
-      Alert.alert('Nothing in it yet', 'Add at least one exercise or body part.');
+    if (kind === 'targets' && targets.length === 0) {
+      Alert.alert('No targets', 'Add at least one body part.');
+      return;
+    }
+    if (kind === 'fixed' && exercises.length === 0) {
+      Alert.alert('No Exercises', 'Add at least one exercise to the template.');
       return;
     }
 
@@ -151,15 +155,16 @@ export function EditTemplateScreen({ navigation, route }: any) {
         muscleGroups.push(ex.primaryMuscle);
       }
     });
-    bodyParts.forEach(b => {
-      if (!muscleGroups.includes(b.muscle)) muscleGroups.push(b.muscle);
+    targets.forEach(t => {
+      const m = muscleOfPart(t.part);
+      if (kind === 'targets' && !muscleGroups.includes(m)) muscleGroups.push(m);
     });
 
     const template: WorkoutTemplate = {
       id: isEditing ? existingTemplate!.id : generateId(),
       name: name.trim(),
       description: description.trim() || undefined,
-      exercises: exercises.map((e, i) => ({
+      exercises: kind === 'targets' ? [] : exercises.map((e, i) => ({
         exerciseId: e.exerciseId,
         sets: e.sets,
         targetReps: e.targetReps,
@@ -169,8 +174,9 @@ export function EditTemplateScreen({ navigation, route }: any) {
         order: i,
       })),
       muscleGroups,
-      bodyParts: bodyParts.length > 0 ? bodyParts : undefined,
-      estimatedDuration: (exercises.length + bodyParts.reduce((n, b) => n + b.count, 0)) * 8,
+      kind,
+      targets: kind === 'targets' ? targets.map(t => ({ ...t, reps: t.reps?.trim() || undefined })) : undefined,
+      estimatedDuration: kind === 'targets' ? targets.reduce((n, t) => n + t.exercises, 0) * 8 : exercises.length * 8,
       color,
       icon,
       lastUsed: existingTemplate?.lastUsed,
@@ -196,7 +202,7 @@ export function EditTemplateScreen({ navigation, route }: any) {
           <Ionicons name="close" size={28} color={Colors.text} />
         </Pressable>
         <Text style={styles.topTitle}>
-          {isEditing ? 'Edit Template' : 'New Template'}
+          {kind === 'targets' ? (isEditing ? 'Edit Targets' : 'New Targets Template') : isEditing ? 'Edit Template' : 'New Template'}
         </Text>
         <Pressable onPress={handleSave} style={styles.saveBtn}>
           <Text style={styles.saveText}>Save</Text>
@@ -223,7 +229,7 @@ export function EditTemplateScreen({ navigation, route }: any) {
         </Card>
 
         {/* Exercises */}
-        <Card style={styles.section}>
+        {kind === 'fixed' && <Card style={styles.section}>
           <Text style={styles.sectionLabel}>
             Exercises ({exercises.length})
           </Text>
@@ -351,45 +357,54 @@ export function EditTemplateScreen({ navigation, route }: any) {
             fullWidth
             icon={<Ionicons name="add-circle-outline" size={20} color={Colors.text} />}
           />
-        </Card>
+        </Card>}
 
-        {/* Body parts: exercises chosen on the day */}
-        <Card style={styles.section}>
-          <Text style={styles.sectionLabel}>Body parts ({bodyParts.length})</Text>
-          <Text style={styles.bpHint}>
-            Pick the exercises yourself on the day. Set how many exercises each body part gets.
-          </Text>
-          {bodyParts.map((b, i) => (
-            <View key={b.muscle} style={styles.bpRow}>
-              <Text style={styles.bpName}>{MUSCLE_GROUP_LABELS[b.muscle]}</Text>
-              <Stepper
-                label="Exercises"
-                value={b.count}
-                onChange={v => setBodyParts(prev => prev.map((x, j) => (j === i ? { ...x, count: v } : x)))}
-              />
-              <Stepper
-                label="Sets each"
-                value={b.sets}
-                onChange={v => setBodyParts(prev => prev.map((x, j) => (j === i ? { ...x, sets: v } : x)))}
-              />
-              <Pressable onPress={() => setBodyParts(prev => prev.filter((_, j) => j !== i))} hitSlop={8}>
-                <Ionicons name="trash-outline" size={18} color={Colors.danger} />
-              </Pressable>
-            </View>
-          ))}
-          <View style={styles.bpChips}>
-            {BODY_PARTS.filter(m => !bodyParts.some(b => b.muscle === m)).map(m => (
-              <Pressable
-                key={m}
-                onPress={() => setBodyParts(prev => [...prev, { muscle: m, count: 2, sets: 3 }])}
-                style={styles.bpChip}
-              >
-                <Ionicons name="add" size={14} color={Colors.text} />
-                <Text style={styles.bpChipText}>{MUSCLE_GROUP_LABELS[m]}</Text>
-              </Pressable>
+        {/* Targets: body parts done on the day, required to finish */}
+        {kind === 'targets' && (
+          <Card style={styles.section}>
+            <Text style={styles.sectionLabel}>Targets ({targets.length})</Text>
+            <Text style={styles.bpHint}>
+              You choose the exercises in the gym. The workout can't be finished until every target is done.
+            </Text>
+            {targets.map((t, i) => (
+              <View key={t.part} style={styles.bpBlock}>
+                <View style={styles.bpHead}>
+                  <Text style={styles.bpName}>{BODY_PART_LABELS[t.part]}</Text>
+                  <Pressable onPress={() => setTargets(prev => prev.filter((_, j) => j !== i))} hitSlop={8}>
+                    <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+                  </Pressable>
+                </View>
+                <View style={styles.bpRow}>
+                  <Stepper label="Exercises" value={t.exercises} onChange={v => updateTarget(i, { exercises: v })} />
+                  <Stepper label="Sets each" value={t.sets} onChange={v => updateTarget(i, { sets: v })} />
+                  <View style={styles.stepper}>
+                    <Text style={styles.stepperLabel}>Reps</Text>
+                    <TextInput
+                      style={styles.repsInput}
+                      value={t.reps ?? ''}
+                      onChangeText={v => updateTarget(i, { reps: v.replace(/[^0-9\- ]/g, '') })}
+                      placeholder="8-12"
+                      placeholderTextColor={Colors.textTertiary}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                </View>
+              </View>
             ))}
-          </View>
-        </Card>
+            <View style={styles.bpChips}>
+              {BODY_PARTS.filter(p => !targets.some(t => t.part === p)).map(p => (
+                <Pressable
+                  key={p}
+                  onPress={() => setTargets(prev => [...prev, { part: p, exercises: 1, sets: 3 }])}
+                  style={styles.bpChip}
+                >
+                  <Ionicons name="add" size={14} color={Colors.text} />
+                  <Text style={styles.bpChipText}>{BODY_PART_LABELS[p]}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Card>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -433,15 +448,22 @@ function Stepper({ label, value, onChange }: { label: string; value: number; onC
 
 const styles = StyleSheet.create({
   bpHint: { color: Colors.textSecondary, fontSize: FontSize.xs, marginBottom: Spacing.sm },
-  bpRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
+  bpBlock: { paddingVertical: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border, gap: Spacing.sm },
+  bpHead: { flexDirection: 'row', alignItems: 'center' },
+  bpRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   bpName: { flex: 1, color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
+  repsInput: {
+    width: 72,
+    height: 28,
+    paddingVertical: 0,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    color: Colors.text,
+    fontSize: FontSize.md,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   bpChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.sm },
   bpChip: {
     flexDirection: 'row',

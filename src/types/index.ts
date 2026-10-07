@@ -66,19 +66,29 @@ export interface WorkoutExercise {
   notes?: string;
   supersetGroupId?: string;
   order: number;
+  /** Which target this exercise was chosen for (target templates only). */
+  targetId?: string;
 }
 
-/** A body part to fill on the day: how many exercises, and how many sets each. */
-export interface BodyPartSlot {
-  muscle: MuscleGroup;
-  count: number;
+/** Body parts for target templates (back includes lats). */
+export type BodyPart =
+  | 'chest' | 'back' | 'traps' | 'shoulders'
+  | 'biceps' | 'triceps' | 'forearms'
+  | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'core';
+
+/** "Do N exercises for this body part, S sets each, around R reps." */
+export interface BodyPartTarget {
+  part: BodyPart;
+  exercises: number;
   sets: number;
+  /** Rep target shown as a guide, e.g. "8-12". */
+  reps?: string;
 }
 
 export interface Workout {
   id: string;
-  /** Body parts still to choose exercises for (from a body-part template). */
-  toPick?: (BodyPartSlot & { id: string })[];
+  /** From a target template: what has to be done before the workout can finish. */
+  targets?: (BodyPartTarget & { id: string })[];
   name: string;
   startTime: string;    // ISO date
   endTime?: string;     // ISO date
@@ -106,8 +116,9 @@ export interface WorkoutTemplate {
     notes?: string;
   }[];
   muscleGroups: MuscleGroup[];
-  /** Body parts whose exercises are chosen on the day, e.g. Chest ×3, Back ×2. */
-  bodyParts?: BodyPartSlot[];
+  /** 'targets': no fixed exercises; body-part targets chosen on the day and required to finish. */
+  kind?: 'fixed' | 'targets';
+  targets?: BodyPartTarget[];
   estimatedDuration?: number;
   color?: string;
   icon?: string;

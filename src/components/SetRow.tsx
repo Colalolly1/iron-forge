@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentMuted,
   },
   setNum: {
-    width: 24,
+    width: 30,
     alignItems: 'center',
   },
   setNumText: {

@@ -21,7 +21,8 @@ import { importTemplatesJSON } from '../utils/importTemplates';
 import { readPickedFile } from '../utils/export';
 import * as DocumentPicker from 'expo-document-picker';
 import { EXERCISE_MAP } from '../data/exercises';
-import { exercisesFromTemplate, toPickFromTemplate, bodyPartsLine } from '../utils/startTemplate';
+import { exercisesFromTemplate, targetsFromTemplate } from '../utils/startTemplate';
+import { BODY_PART_LABELS } from '../utils/bodyParts';
 import { DEFAULT_TEMPLATES } from '../data/templates';
 import {
   formatDuration,
@@ -55,7 +56,7 @@ export function TemplatesScreen({ navigation }: any) {
 
   const handleStartFromTemplate = (template: WorkoutTemplate) => {
     const exercises = exercisesFromTemplate(template);
-    startOrReplace({ isWorkoutActive, discardWorkout, navigation, start: () => startWorkout(template.name, exercises, toPickFromTemplate(template)) });
+    startOrReplace({ isWorkoutActive, discardWorkout, navigation, start: () => startWorkout(template.name, exercises, targetsFromTemplate(template)) });
   };
 
   return (
@@ -88,6 +89,15 @@ export function TemplatesScreen({ navigation }: any) {
           size="lg"
           fullWidth
           icon={<Ionicons name="add-circle-outline" size={20} color={Colors.text} />}
+        />
+
+        <Button
+          title="Create Targets Template"
+          onPress={() => navigation.navigate('EditTemplate', { kind: 'targets' })}
+          variant="secondary"
+          size="lg"
+          fullWidth
+          icon={<Ionicons name="body-outline" size={20} color={Colors.text} />}
         />
 
         <Button
@@ -190,9 +200,11 @@ export function TemplatesScreen({ navigation }: any) {
                     </View>
                   );
                 })}
-                {template.bodyParts && template.bodyParts.length > 0 ? (
-                  <Text style={styles.exerciseItem}>Choose on the day: {bodyPartsLine(template.bodyParts)}</Text>
-                ) : null}
+                {template.kind === 'targets' && (template.targets ?? []).map(t => (
+                  <Text key={t.part} style={styles.exerciseItem}>
+                    {BODY_PART_LABELS[t.part]}: {t.exercises} exercise{t.exercises === 1 ? '' : 's'} × {t.sets} sets{t.reps ? ` · ${t.reps} reps` : ''}
+                  </Text>
+                ))}
               </View>
 
               <View style={styles.templateMuscles}>

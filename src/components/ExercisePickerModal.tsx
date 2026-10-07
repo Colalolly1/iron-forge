@@ -16,7 +16,8 @@ import { MuscleGroupBadge } from './MuscleGroupBadge';
 import { getAllExercises, searchExercises, MUSCLE_GROUP_LABELS, registerCustomExercises } from '../data/exercises';
 import { getMuscleGroupColor, generateId } from '../utils/helpers';
 import { getCustomExercises, saveCustomExercise } from '../utils/storage';
-import { Exercise, MuscleGroup, ExerciseCategory, ExerciseForce } from '../types';
+import { Exercise, MuscleGroup, ExerciseCategory, ExerciseForce, BodyPart } from '../types';
+import { bodyPartOf, BODY_PART_LABELS } from '../utils/bodyParts';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 const MUSCLE_GROUPS: MuscleGroup[] = [
@@ -54,13 +55,13 @@ export function ExercisePickerModal({
   visible,
   onClose,
   onSelect,
-  initialMuscle,
+  onlyPart,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (exercise: Exercise) => void;
-  /** Open already filtered to this body part (used when filling a body-part slot). */
-  initialMuscle?: MuscleGroup;
+  /** Show only exercises for this body part (choosing for a target). */
+  onlyPart?: BodyPart;
 }) {
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
@@ -74,11 +75,13 @@ export function ExercisePickerModal({
   const [newForce, setNewForce] = useState<ExerciseForce>('push');
 
   useEffect(() => {
-    if (visible && initialMuscle) {
-      setSearch('');
-      setSelectedMuscle(initialMuscle);
-    }
-  }, [visible, initialMuscle]);
+    if (visible && onlyPart) setSearch('');
+  }, [visible, onlyPart]);
+
+  // Keep the body-part view while the sheet slides away, so it doesn't flash the full list.
+  const lastPart = React.useRef(onlyPart);
+  if (visible) lastPart.current = onlyPart;
+  const part = visible ? onlyPart : lastPart.current;
 
   useEffect(() => {
     if (visible) {
@@ -90,7 +93,9 @@ export function ExercisePickerModal({
   }, [visible]);
 
   const exercises = getAllExercises();
-  const filtered = search
+  const filtered = part
+    ? (search ? searchExercises(search) : exercises).filter(e => bodyPartOf(e) === part)
+    : search
     ? searchExercises(search)
     : selectedMuscle
     ? exercises.filter(e => (MUSCLE_FAMILY[selectedMuscle] ?? [selectedMuscle]).includes(e.primaryMuscle))
@@ -232,7 +237,10 @@ export function ExercisePickerModal({
 
         {!showCreateForm && (
           <>
-            {!search && (
+            {part && (
+              <Text style={styles.onlyPartTitle}>{BODY_PART_LABELS[part]} exercises</Text>
+            )}
+            {!search && !part && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -419,6 +427,13 @@ const styles = StyleSheet.create({
     color: Colors.bg,
     fontSize: FontSize.md,
     fontWeight: '800',
+  },
+  onlyPartTitle: {
+    color: Colors.text,
+    fontSize: FontSize.md,
+    fontWeight: '700',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   muscleFilter: {
     flexShrink: 0,

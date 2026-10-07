@@ -54,15 +54,13 @@ interface WorkoutContextType {
   isRestTimerRunning: boolean;
   newPRs: PersonalRecord[];
 
-  startWorkout: (name?: string, templateExercises?: WorkoutExercise[], toPick?: Workout['toPick']) => void;
+  startWorkout: (name?: string, templateExercises?: WorkoutExercise[], targets?: Workout['targets']) => void;
   finishWorkout: () => Promise<PersonalRecord[]>;
   discardWorkout: () => void;
 
   addExercise: (exercise: Exercise, sets?: number) => void;
-  /** Fill one body-part slot with an exercise; the slot's count goes down by one. */
-  pickForSlot: (slotId: string, exercise: Exercise) => void;
-  /** Change how many exercises are still to choose for a body part. */
-  changeSlotCount: (slotId: string, delta: number) => void;
+  /** Add an exercise chosen for one body-part target, with that target's number of sets. */
+  pickForTarget: (targetId: string, exercise: Exercise) => void;
   removeExercise: (exerciseId: string) => void;
   replaceExercise: (workoutExerciseId: string, newExercise: Exercise) => void;
   reorderExercise: (fromIndex: number, toIndex: number) => void;
@@ -212,13 +210,13 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const startWorkout = useCallback(
-    (name?: string, templateExercises?: WorkoutExercise[], toPick?: Workout['toPick']) => {
+    (name?: string, templateExercises?: WorkoutExercise[], targets?: Workout['targets']) => {
       const workout: Workout = {
         id: generateId(),
         name: name ?? 'Workout',
         startTime: new Date().toISOString(),
         exercises: templateExercises ?? [],
-        ...(toPick && toPick.length > 0 ? { toPick } : {}),
+        ...(targets && targets.length > 0 ? { targets } : {}),
         totalVolume: 0,
         totalSets: 0,
         duration: 0,
@@ -244,10 +242,8 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
       totalSets += completed.length;
     });
 
-    // Unchosen body-part slots belong to the session, not the history.
-    const { toPick: _unchosen, ...logged } = activeWorkout;
     const finishedWorkout: Workout = {
-      ...logged,
+      ...activeWorkout,
       endTime,
       duration,
       totalVolume: totalVol,
@@ -281,32 +277,19 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
     [updateWorkout]
   );
 
-  const pickForSlot = useCallback(
-    (slotId: string, exercise: Exercise) => {
+  const pickForTarget = useCallback(
+    (targetId: string, exercise: Exercise) => {
       updateWorkout(w => {
-        const slot = (w.toPick ?? []).find(s => s.id === slotId);
-        if (!slot) return w;
-        const toPick = (w.toPick ?? [])
-          .map(s => (s.id === slotId ? { ...s, count: s.count - 1 } : s))
-          .filter(s => s.count > 0);
+        const target = (w.targets ?? []).find(t => t.id === targetId);
+        if (!target) return w;
         return {
           ...w,
-          toPick,
-          exercises: [...w.exercises, newWorkoutExercise(exercise, slot.sets, w.exercises.length)],
+          exercises: [
+            ...w.exercises,
+            { ...newWorkoutExercise(exercise, target.sets, w.exercises.length), targetId },
+          ],
         };
       });
-    },
-    [updateWorkout]
-  );
-
-  const changeSlotCount = useCallback(
-    (slotId: string, delta: number) => {
-      updateWorkout(w => ({
-        ...w,
-        toPick: (w.toPick ?? [])
-          .map(s => (s.id === slotId ? { ...s, count: Math.max(0, s.count + delta) } : s))
-          .filter(s => s.count > 0),
-      }));
     },
     [updateWorkout]
   );
@@ -547,8 +530,7 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
         finishWorkout,
         discardWorkout,
         addExercise,
-        pickForSlot,
-        changeSlotCount,
+        pickForTarget,
         removeExercise,
         replaceExercise,
         reorderExercise,

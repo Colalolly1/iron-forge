@@ -1,5 +1,6 @@
-import { WorkoutTemplate, MuscleGroup, Exercise, BodyPartSlot } from '../types';
-import { EXERCISE_MAP, MUSCLE_GROUP_LABELS } from '../data/exercises';
+import { WorkoutTemplate, MuscleGroup, Exercise, BodyPart, BodyPartTarget } from '../types';
+import { EXERCISE_MAP } from '../data/exercises';
+import { BODY_PART_LABELS, muscleOfPart } from './bodyParts';
 import { generateId } from './helpers';
 import {
   getTemplates,
@@ -27,7 +28,8 @@ import { fuzzyMatchExercise, createCustomExerciseFromName } from './importStrong
  *         { "exercise": "Barbell Bench Press", "exerciseId": "bb-bench-press", "sets": 4,
  *           "supersetGroup": "A", "notes": "optional", "targetReps": 8, "targetWeight": 40 }
  *       ],
- *       "bodyParts": [ { "muscle": "chest", "exercises": 3, "sets": 3 } ]   (optional)
+ *       "type": "targets", "targets": [ { "part": "chest", "exercises": 2, "sets": 3, "reps": "8-12" } ]
+ *       (a targets template has no "exercises"; body parts are chosen on the day)
  *     }
  *   ],
  *   "exerciseNotes": [ { "exerciseId", "exercise", "note" } ],
@@ -55,7 +57,8 @@ interface TemplateFileEntry {
   icon?: string;
   exercises?: TemplateFileExercise[];
   /** Body parts chosen on the day, e.g. { "muscle": "chest", "exercises": 3, "sets": 3 } */
-  bodyParts?: { muscle?: string; exercises?: number; count?: number; sets?: number }[];
+  type?: string;
+  targets?: { part?: string; exercises?: number; sets?: number; reps?: string }[];
 }
 
 interface TemplateFileCustomExercise {
@@ -143,19 +146,20 @@ export async function importTemplatesJSON(jsonContent: string): Promise<Template
   const existingTemplates = await getTemplates();
 
   for (const entry of entries) {
-    const fileBodyParts: any[] = Array.isArray(entry?.bodyParts) ? entry.bodyParts : [];
+    const fileTargets = Array.isArray(entry?.targets) ? entry.targets : [];
     const fileExercises: TemplateFileExercise[] = Array.isArray(entry?.exercises) ? entry.exercises : [];
-    if (!entry?.name || (fileExercises.length === 0 && fileBodyParts.length === 0)) {
+    if (!entry?.name || (fileExercises.length === 0 && fileTargets.length === 0)) {
       continue;
     }
-    // Body parts chosen on the day: { "muscle": "chest", "exercises": 3, "sets": 3 }
-    const bodyParts: BodyPartSlot[] = fileBodyParts
-      .filter(b => b && typeof b.muscle === 'string' && b.muscle in MUSCLE_GROUP_LABELS)
-      .map(b => ({
-        muscle: b.muscle as MuscleGroup,
-        count: Math.max(1, Math.round(Number(b.exercises ?? b.count) || 1)),
-        sets: Math.max(1, Math.round(Number(b.sets) || 3)),
+    const targets: BodyPartTarget[] = fileTargets
+      .filter(t => t && typeof t.part === 'string' && t.part in BODY_PART_LABELS)
+      .map(t => ({
+        part: t.part as BodyPart,
+        exercises: Math.max(1, Math.round(Number(t.exercises) || 1)),
+        sets: Math.max(1, Math.round(Number(t.sets) || 3)),
+        ...(t.reps ? { reps: String(t.reps) } : {}),
       }));
+    const isTargets = entry.type === 'targets' || (fileExercises.length === 0 && targets.length > 0);
 
     const templateExercises: WorkoutTemplate['exercises'] = [];
     const muscleSet = new Set<MuscleGroup>();
@@ -194,8 +198,8 @@ export async function importTemplatesJSON(jsonContent: string): Promise<Template
       muscleSet.add(exercise.primaryMuscle);
     }
 
-    if (templateExercises.length === 0 && bodyParts.length === 0) continue;
-    bodyParts.forEach(b => muscleSet.add(b.muscle));
+    if (isTargets ? targets.length === 0 : templateExercises.length === 0) continue;
+    if (isTargets) targets.forEach(t => muscleSet.add(muscleOfPart(t.part)));
 
     const existing = existingTemplates.find(
       t => t.name.trim().toLowerCase() === entry.name!.trim().toLowerCase()
@@ -205,9 +209,9 @@ export async function importTemplatesJSON(jsonContent: string): Promise<Template
       id: existing?.id ?? generateId(),
       name: entry.name,
       description: entry.description,
-      exercises: templateExercises,
+      exercises: isTargets ? [] : templateExercises,
       muscleGroups: Array.from(muscleSet),
-      ...(bodyParts.length > 0 ? { bodyParts } : {}),
+      ...(isTargets ? { kind: 'targets' as const, targets } : {}),
       icon: entry.icon || existing?.icon || '📋',
       color: existing?.color,
       timesUsed: existing?.timesUsed ?? 0,
@@ -314,8 +318,8 @@ export async function exportTemplatesJSON(): Promise<string> {
             ...(te.notes ? { notes: te.notes } : {}),
           };
         }),
-        ...(t.bodyParts && t.bodyParts.length > 0
-          ? { bodyParts: t.bodyParts.map(b => ({ muscle: b.muscle, exercises: b.count, sets: b.sets })) }
+        ...(t.kind === 'targets'
+          ? { type: 'targets', targets: (t.targets ?? []).map(x => ({ part: x.part, exercises: x.exercises, sets: x.sets, ...(x.reps ? { reps: x.reps } : {}) })) }
           : {}),
       };
     }),

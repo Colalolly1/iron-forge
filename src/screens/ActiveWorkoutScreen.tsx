@@ -19,7 +19,7 @@ import { RestTimerBar } from '../components/RestTimer';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
 import { getProfile } from '../utils/storage';
-import { MUSCLE_GROUP_LABELS } from '../data/exercises';
+import { BODY_PART_LABELS, targetProgress, whatsLeft } from '../utils/bodyParts';
 import {
   formatTimer,
   formatWeight,
@@ -37,14 +37,13 @@ export function ActiveWorkoutScreen({ navigation }: any) {
     addExercise,
     reorderExercise,
     toggleSuperset,
-    pickForSlot,
-    changeSlotCount,
+    pickForTarget,
     newPRs,
     clearPRs,
   } = useWorkout();
   const [elapsed, setElapsed] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
-  const [pickingSlot, setPickingSlot] = useState<string | null>(null);
+  const [pickingTarget, setPickingTarget] = useState<string | null>(null);
   // A second tap on Finish while the first save is still running used to
   // write the workout twice (hence duplicate entries in History). Declared
   // before the early return below so the hook order never changes.
@@ -132,6 +131,9 @@ export function ActiveWorkoutScreen({ navigation }: any) {
     );
   }
 
+  const progress = targetProgress(activeWorkout);
+  const targetById = new Map((activeWorkout.targets ?? []).map(t => [t.id, t]));
+
   const totalVolume = activeWorkout.exercises.reduce(
     (sum, e) => sum + calculateVolume(e.sets),
     0
@@ -198,8 +200,18 @@ export function ActiveWorkoutScreen({ navigation }: any) {
           <Text style={styles.timerText}>{formatTimer(elapsed)}</Text>
         </View>
 
-        <Pressable onPress={() => setShowFinishModal(true)} style={styles.finishBtn}>
-          <Text style={styles.finishText}>Finish</Text>
+        <Pressable
+          onPress={() => {
+            const left = whatsLeft(activeWorkout);
+            if (left.length > 0) {
+              Alert.alert('Not done yet', `${left.join('\n')}\n\nFinish every target to end the workout.`);
+              return;
+            }
+            setShowFinishModal(true);
+          }}
+          style={[styles.finishBtn, progress.some(p => !p.done) && styles.finishBtnLocked]}
+        >
+          <Text style={[styles.finishText, progress.some(p => !p.done) && styles.finishTextLocked]}>Finish</Text>
         </Pressable>
       </View>
 
@@ -236,24 +248,30 @@ export function ActiveWorkoutScreen({ navigation }: any) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-          {(activeWorkout.toPick ?? []).length > 0 && (
+          {progress.length > 0 && (
             <View style={pickStyles.card}>
-              <Text style={pickStyles.title}>Choose your exercises</Text>
-              {(activeWorkout.toPick ?? []).map(slot => (
-                <View key={slot.id} style={pickStyles.row}>
+              <View style={pickStyles.titleRow}>
+                <Text style={pickStyles.title}>Targets</Text>
+                <Text style={pickStyles.meta}>{progress.filter(p => p.done).length} of {progress.length} done</Text>
+              </View>
+              {progress.map(p => (
+                <View key={p.id} style={pickStyles.row}>
                   <View style={{ flex: 1 }}>
-                    <Text style={pickStyles.part}>{MUSCLE_GROUP_LABELS[slot.muscle]}</Text>
-                    <Text style={pickStyles.meta}>{slot.count} to choose · {slot.sets} sets each</Text>
+                    <Text style={[pickStyles.part, p.done && pickStyles.partDone]}>{BODY_PART_LABELS[p.part]}</Text>
+                    <Text style={pickStyles.meta}>
+                      {p.chosen}/{p.exercisesNeeded} chosen · {p.setsDone}/{p.setsNeeded} sets{p.reps ? ` · ${p.reps} reps` : ''}
+                    </Text>
                   </View>
-                  <Pressable onPress={() => changeSlotCount(slot.id, -1)} hitSlop={8} style={pickStyles.step}>
-                    <Ionicons name="remove" size={18} color={Colors.text} />
-                  </Pressable>
-                  <Pressable onPress={() => changeSlotCount(slot.id, 1)} hitSlop={8} style={pickStyles.step}>
-                    <Ionicons name="add" size={18} color={Colors.text} />
-                  </Pressable>
-                  <Pressable onPress={() => setPickingSlot(slot.id)} style={pickStyles.choose}>
-                    <Text style={pickStyles.chooseText}>Choose</Text>
-                  </Pressable>
+                  {p.done ? (
+                    <View style={pickStyles.doneTag}>
+                      <Ionicons name="checkmark" size={16} color={Colors.textInverse} />
+                      <Text style={pickStyles.doneText}>Done</Text>
+                    </View>
+                  ) : p.chosen < p.exercisesNeeded ? (
+                    <Pressable onPress={() => setPickingTarget(p.id)} style={pickStyles.choose}>
+                      <Text style={pickStyles.chooseText}>Choose</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ))}
             </View>
@@ -280,6 +298,11 @@ export function ActiveWorkoutScreen({ navigation }: any) {
                     onMoveUp={idx > 0 ? () => reorderExercise(idx, idx - 1) : undefined}
                     onMoveDown={idx < activeWorkout.exercises.length - 1 ? () => reorderExercise(idx, idx + 1) : undefined}
                     onSetCompleted={handleSetCompleted}
+                    targetPart={we.targetId ? targetById.get(we.targetId)?.part : undefined}
+                    targetLabel={(() => {
+                      const t = we.targetId ? targetById.get(we.targetId) : undefined;
+                      return t ? `For ${BODY_PART_LABELS[t.part]} · ${t.sets} sets${t.reps ? ` · ${t.reps} reps` : ''}` : undefined;
+                    })()}
                   />
                 </View>
 
@@ -332,14 +355,14 @@ export function ActiveWorkoutScreen({ navigation }: any) {
 
       {/* Exercise Picker Modal */}
       <ExercisePickerModal
-        visible={showExercisePicker || pickingSlot !== null}
-        initialMuscle={pickingSlot ? activeWorkout.toPick?.find(s => s.id === pickingSlot)?.muscle : undefined}
-        onClose={() => { setShowExercisePicker(false); setPickingSlot(null); }}
+        visible={showExercisePicker || pickingTarget !== null}
+        onlyPart={pickingTarget ? activeWorkout.targets?.find(t => t.id === pickingTarget)?.part : undefined}
+        onClose={() => { setShowExercisePicker(false); setPickingTarget(null); }}
         onSelect={exercise => {
-          if (pickingSlot) pickForSlot(pickingSlot, exercise);
+          if (pickingTarget) pickForTarget(pickingTarget, exercise);
           else addExercise(exercise);
           setShowExercisePicker(false);
-          setPickingSlot(null);
+          setPickingTarget(null);
         }}
       />
 
@@ -413,6 +436,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.round,
   },
+  finishBtnLocked: {
+    backgroundColor: Colors.bgElevated,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  finishTextLocked: { color: Colors.textSecondary },
   finishText: {
     color: Colors.textInverse,
     fontSize: FontSize.md,
@@ -547,6 +576,18 @@ const pickStyles = StyleSheet.create({
     gap: Spacing.sm,
   },
   title: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '700' },
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  partDone: { textDecorationLine: 'line-through', color: Colors.textSecondary },
+  doneTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: BorderRadius.md,
+  },
+  doneText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -557,15 +598,6 @@ const pickStyles = StyleSheet.create({
   },
   part: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
   meta: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 2 },
-  step: {
-    width: 34,
-    height: 34,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   choose: {
     backgroundColor: Colors.primary,
     paddingHorizontal: Spacing.md,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createRef, useImperativeHandle } fr
 import { View, Text, StyleSheet, Pressable, TextInput, Alert, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { WorkoutExercise, WorkoutSet, Exercise } from '../types';
+import { WorkoutExercise, WorkoutSet, Exercise, BodyPart } from '../types';
 import { SetRow, SetRowRef } from './SetRow';
 import { MuscleGroupBadge } from './MuscleGroupBadge';
 import { ExercisePickerModal } from './ExercisePickerModal';
@@ -19,6 +19,9 @@ interface ExerciseCardProps {
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onSetCompleted?: (exerciseId: string, setIdx: number) => void;
+  /** Set when this exercise was chosen for a body-part target, e.g. "For Chest · 3 sets · 8-12 reps". */
+  targetLabel?: string;
+  targetPart?: BodyPart;
 }
 
 export interface ExerciseCardRef {
@@ -26,7 +29,7 @@ export interface ExerciseCardRef {
 }
 
 export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>(function ExerciseCard(
-  { workoutExercise, showRPE, unit, isInSuperset, onMoveUp, onMoveDown, onSetCompleted },
+  { workoutExercise, showRPE, unit, isInSuperset, onMoveUp, onMoveDown, onSetCompleted, targetLabel, targetPart },
   ref
 ) {
   const navigation = useNavigation<any>();
@@ -96,6 +99,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
               <Ionicons name="analytics-outline" size={18} color={Colors.textSecondary} />
             </Pressable>
           </View>
+          {targetLabel ? <Text style={styles.targetLabel}>{targetLabel}</Text> : null}
           <View style={styles.badges}>
             <MuscleGroupBadge muscle={exercise.primaryMuscle} />
             <Text style={styles.meta}>
@@ -242,7 +246,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
 
           {/* Column headers */}
           <View style={styles.columnHeaders}>
-            <Text style={[styles.colHeader, { width: 24 }]}>SET</Text>
+            <Text style={[styles.colHeader, { width: 30 }]} numberOfLines={1}>SET</Text>
             <View style={{ width: 20 }} />
             <Text style={[styles.colHeader, { flex: 1 }]}>{unit.toUpperCase()}</Text>
             <View style={{ width: 12 }} />
@@ -309,6 +313,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
 
       <ExercisePickerModal
         visible={showSwapPicker}
+        onlyPart={targetPart}
         onClose={() => setShowSwapPicker(false)}
         onSelect={(newExercise: Exercise) => {
           replaceExercise(workoutExercise.id, newExercise);
@@ -350,6 +355,11 @@ const styles = StyleSheet.create({
   exerciseName: {
     color: Colors.text,
     fontSize: FontSize.lg,
+    fontWeight: '700',
+  },
+  targetLabel: {
+    color: Colors.text,
+    fontSize: FontSize.xs,
     fontWeight: '700',
   },
   badges: {

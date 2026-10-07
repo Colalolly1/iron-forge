@@ -1,6 +1,7 @@
-import { EXERCISE_MAP, MUSCLE_GROUP_LABELS } from '../data/exercises';
+import { EXERCISE_MAP } from '../data/exercises';
 import { generateId } from './helpers';
-import { BodyPartSlot, Workout, WorkoutExercise, WorkoutTemplate } from '../types';
+import { targetsLine } from './bodyParts';
+import { Workout, WorkoutExercise, WorkoutTemplate } from '../types';
 
 /** A template turned into the empty sets of a workout about to start. */
 export function exercisesFromTemplate(template: WorkoutTemplate): WorkoutExercise[] {
@@ -27,21 +28,16 @@ export function exercisesFromTemplate(template: WorkoutTemplate): WorkoutExercis
     .filter(Boolean) as WorkoutExercise[];
 }
 
-/** The body parts a template leaves to be chosen on the day. */
-export function toPickFromTemplate(template: WorkoutTemplate): NonNullable<Workout['toPick']> {
-  return (template.bodyParts ?? [])
-    .filter(b => b.count > 0)
-    .map(b => ({ ...b, id: generateId() }));
+/** A target template's targets, each with its own id for this workout. */
+export function targetsFromTemplate(template: WorkoutTemplate): NonNullable<Workout['targets']> {
+  if (template.kind !== 'targets') return [];
+  return (template.targets ?? [])
+    .filter(t => t.exercises > 0 && t.sets > 0)
+    .map(t => ({ ...t, id: generateId() }));
 }
 
-/** "Chest ×3 · Back ×2" */
-export function bodyPartsLine(parts: BodyPartSlot[] | undefined): string {
-  return (parts ?? []).map(b => `${MUSCLE_GROUP_LABELS[b.muscle]} ×${b.count}`).join(' · ');
-}
-
-/** What a template holds, as one line: fixed exercises, then body parts. */
+/** What a template holds, as one line. */
 export function templateLine(template: WorkoutTemplate): string {
-  const names = template.exercises.map(te => EXERCISE_MAP.get(te.exerciseId)?.name ?? '?');
-  const parts = bodyPartsLine(template.bodyParts);
-  return [...names, ...(parts ? [parts] : [])].join(' · ');
+  if (template.kind === 'targets') return targetsLine(template.targets);
+  return template.exercises.map(te => EXERCISE_MAP.get(te.exerciseId)?.name ?? '?').join(' · ');
 }
