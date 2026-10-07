@@ -13,10 +13,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
-import { EXERCISE_MAP } from '../data/exercises';
+import { EXERCISE_MAP, MUSCLE_GROUP_LABELS } from '../data/exercises';
 import { saveTemplate, getExerciseRestTimer, saveExerciseRestTimer } from '../utils/storage';
 import { generateId } from '../utils/helpers';
-import { WorkoutTemplate, Exercise, MuscleGroup } from '../types';
+import { WorkoutTemplate, Exercise, MuscleGroup, BodyPartSlot } from '../types';
+
+const BODY_PARTS: MuscleGroup[] = [
+  'chest', 'back', 'shoulders', 'biceps', 'triceps',
+  'quads', 'hamstrings', 'glutes', 'calves', 'core',
+];
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 const TEMPLATE_COLORS = [
@@ -63,6 +68,7 @@ export function EditTemplateScreen({ navigation, route }: any) {
       };
     });
   });
+  const [bodyParts, setBodyParts] = useState<BodyPartSlot[]>(existingTemplate?.bodyParts ?? []);
   const [showPicker, setShowPicker] = useState(false);
   const [swapIndex, setSwapIndex] = useState<number | null>(null);
 
@@ -133,8 +139,8 @@ export function EditTemplateScreen({ navigation, route }: any) {
       Alert.alert('Missing Name', 'Please enter a template name.');
       return;
     }
-    if (exercises.length === 0) {
-      Alert.alert('No Exercises', 'Add at least one exercise to the template.');
+    if (exercises.length === 0 && bodyParts.length === 0) {
+      Alert.alert('Nothing in it yet', 'Add at least one exercise or body part.');
       return;
     }
 
@@ -144,6 +150,9 @@ export function EditTemplateScreen({ navigation, route }: any) {
       if (ex && !muscleGroups.includes(ex.primaryMuscle)) {
         muscleGroups.push(ex.primaryMuscle);
       }
+    });
+    bodyParts.forEach(b => {
+      if (!muscleGroups.includes(b.muscle)) muscleGroups.push(b.muscle);
     });
 
     const template: WorkoutTemplate = {
@@ -160,7 +169,8 @@ export function EditTemplateScreen({ navigation, route }: any) {
         order: i,
       })),
       muscleGroups,
-      estimatedDuration: exercises.length * 8,
+      bodyParts: bodyParts.length > 0 ? bodyParts : undefined,
+      estimatedDuration: (exercises.length + bodyParts.reduce((n, b) => n + b.count, 0)) * 8,
       color,
       icon,
       lastUsed: existingTemplate?.lastUsed,
@@ -343,6 +353,44 @@ export function EditTemplateScreen({ navigation, route }: any) {
           />
         </Card>
 
+        {/* Body parts: exercises chosen on the day */}
+        <Card style={styles.section}>
+          <Text style={styles.sectionLabel}>Body parts ({bodyParts.length})</Text>
+          <Text style={styles.bpHint}>
+            Pick the exercises yourself on the day. Set how many exercises each body part gets.
+          </Text>
+          {bodyParts.map((b, i) => (
+            <View key={b.muscle} style={styles.bpRow}>
+              <Text style={styles.bpName}>{MUSCLE_GROUP_LABELS[b.muscle]}</Text>
+              <Stepper
+                label="Exercises"
+                value={b.count}
+                onChange={v => setBodyParts(prev => prev.map((x, j) => (j === i ? { ...x, count: v } : x)))}
+              />
+              <Stepper
+                label="Sets each"
+                value={b.sets}
+                onChange={v => setBodyParts(prev => prev.map((x, j) => (j === i ? { ...x, sets: v } : x)))}
+              />
+              <Pressable onPress={() => setBodyParts(prev => prev.filter((_, j) => j !== i))} hitSlop={8}>
+                <Ionicons name="trash-outline" size={18} color={Colors.danger} />
+              </Pressable>
+            </View>
+          ))}
+          <View style={styles.bpChips}>
+            {BODY_PARTS.filter(m => !bodyParts.some(b => b.muscle === m)).map(m => (
+              <Pressable
+                key={m}
+                onPress={() => setBodyParts(prev => [...prev, { muscle: m, count: 2, sets: 3 }])}
+                style={styles.bpChip}
+              >
+                <Ionicons name="add" size={14} color={Colors.text} />
+                <Text style={styles.bpChipText}>{MUSCLE_GROUP_LABELS[m]}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+
         <View style={{ height: 100 }} />
       </ScrollView>
 
@@ -365,7 +413,61 @@ export function EditTemplateScreen({ navigation, route }: any) {
   );
 }
 
+/** − value + with a small label above; never below 1. */
+function Stepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.stepper}>
+      <Text style={styles.stepperLabel}>{label}</Text>
+      <View style={styles.stepperRow}>
+        <Pressable onPress={() => onChange(Math.max(1, value - 1))} hitSlop={6} style={styles.stepBtn}>
+          <Ionicons name="remove" size={16} color={Colors.text} />
+        </Pressable>
+        <Text style={styles.stepValue}>{value}</Text>
+        <Pressable onPress={() => onChange(Math.min(20, value + 1))} hitSlop={6} style={styles.stepBtn}>
+          <Ionicons name="add" size={16} color={Colors.text} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  bpHint: { color: Colors.textSecondary, fontSize: FontSize.xs, marginBottom: Spacing.sm },
+  bpRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  bpName: { flex: 1, color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
+  bpChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: Spacing.sm },
+  bpChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  bpChipText: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600' },
+  stepper: { alignItems: 'center' },
+  stepperLabel: { color: Colors.textSecondary, fontSize: 10, marginBottom: 2 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepValue: { color: Colors.text, fontSize: FontSize.md, fontWeight: '800', minWidth: 18, textAlign: 'center' },
+
   safe: { flex: 1, backgroundColor: Colors.bg },
   topBar: {
     flexDirection: 'row',

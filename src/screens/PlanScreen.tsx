@@ -3,9 +3,10 @@ import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
-import { getProfile, getTemplates, getWorkouts, getPlanOverrides, setPlanOverride, saveTemplate } from '../utils/storage';
+import { getProfile, getTemplates, getWorkouts, getPlanOverrides } from '../utils/storage';
+import { planDay, backToWeekly } from '../utils/planActions';
 import { Workout, WorkoutTemplate } from '../types';
-import { DAY_LETTERS, PlanOverrides, REST, dateKey, monthGrid, planFor, sameDay, workoutsOn } from '../utils/plan';
+import { DAY_LETTERS, PlanOverrides, dateKey, monthGrid, planFor, plannedOn, sameDay, workoutsOn } from '../utils/plan';
 import { PlanSheet } from '../components/PlanSheet';
 
 /**
@@ -32,34 +33,6 @@ export function PlanScreen({ navigation }: any) {
   const monthLabel = cursor.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   const plannedThisMonth = cells.filter(d => d.getMonth() === cursor.getMonth() && planFor(d, templates, overrides)).length;
   const doneThisMonth = cells.filter(d => d.getMonth() === cursor.getMonth() && workoutsOn(workouts, d).length > 0).length;
-
-  const pick = async (t: WorkoutTemplate, everyWeek: boolean) => {
-    if (!picking) return;
-    if (everyWeek) {
-      const dow = picking.getDay();
-      // One template per weekday: give the day to this one, take it off the others.
-      for (const other of templates) {
-        const has = (other.days ?? []).includes(dow);
-        if (other.id === t.id && !has) await saveTemplate({ ...other, days: [...(other.days ?? []), dow] });
-        if (other.id !== t.id && has) await saveTemplate({ ...other, days: (other.days ?? []).filter(d => d !== dow) });
-      }
-      await setPlanOverride(dateKey(picking), null);
-    } else {
-      await setPlanOverride(dateKey(picking), t.id);
-    }
-    setPicking(null); load();
-  };
-  const rest = async (everyWeek: boolean) => {
-    if (!picking) return;
-    if (everyWeek) {
-      const dow = picking.getDay();
-      for (const t of templates) if ((t.days ?? []).includes(dow)) await saveTemplate({ ...t, days: (t.days ?? []).filter(d => d !== dow) });
-      await setPlanOverride(dateKey(picking), null);
-    } else {
-      await setPlanOverride(dateKey(picking), REST);
-    }
-    setPicking(null); load();
-  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -97,7 +70,7 @@ export function PlanScreen({ navigation }: any) {
           })}
         </View>
         <View style={styles.legend}>
-          <Text style={styles.legendText}>Tap a date to choose its workout. Weekly repeats every week; Once is that date only and shows in italics.</Text>
+          <Text style={styles.legendText}>Tap a date to plan or clear it. Choices for one date only show in italics.</Text>
         </View>
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -105,9 +78,21 @@ export function PlanScreen({ navigation }: any) {
         date={picking}
         templates={templates}
         current={picking ? planFor(picking, templates, overrides) : null}
+        isOnce={picking ? !!overrides[dateKey(picking)] : false}
+        weekly={picking ? plannedOn(templates, picking.getDay())[0] ?? null : null}
         onClose={() => setPicking(null)}
-        onPick={pick}
-        onRest={rest}
+        onSet={async (t, everyWeek) => {
+          if (!picking) return;
+          await planDay(picking, t, everyWeek, templates);
+          setPicking(null);
+          load();
+        }}
+        onBackToWeekly={async () => {
+          if (!picking) return;
+          await backToWeekly(picking);
+          setPicking(null);
+          load();
+        }}
       />
     </SafeAreaView>
   );

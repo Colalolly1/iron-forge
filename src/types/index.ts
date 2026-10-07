@@ -68,8 +68,17 @@ export interface WorkoutExercise {
   order: number;
 }
 
+/** A body part to fill on the day: how many exercises, and how many sets each. */
+export interface BodyPartSlot {
+  muscle: MuscleGroup;
+  count: number;
+  sets: number;
+}
+
 export interface Workout {
   id: string;
+  /** Body parts still to choose exercises for (from a body-part template). */
+  toPick?: (BodyPartSlot & { id: string })[];
   name: string;
   startTime: string;    // ISO date
   endTime?: string;     // ISO date
@@ -97,6 +106,8 @@ export interface WorkoutTemplate {
     notes?: string;
   }[];
   muscleGroups: MuscleGroup[];
+  /** Body parts whose exercises are chosen on the day, e.g. Chest ×3, Back ×2. */
+  bodyParts?: BodyPartSlot[];
   estimatedDuration?: number;
   color?: string;
   icon?: string;

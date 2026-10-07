@@ -24,6 +24,12 @@ const MUSCLE_GROUPS: MuscleGroup[] = [
   'quads', 'hamstrings', 'glutes', 'calves', 'core', 'full_body', 'cardio',
 ];
 
+/** Back covers lats and traps too; arms-adjacent forearms sit under biceps. */
+const MUSCLE_FAMILY: Partial<Record<MuscleGroup, MuscleGroup[]>> = {
+  back: ['back', 'lats', 'traps'],
+  biceps: ['biceps', 'forearms'],
+};
+
 const CATEGORIES: { value: ExerciseCategory; label: string }[] = [
   { value: 'barbell', label: 'Barbell' },
   { value: 'dumbbell', label: 'Dumbbell' },
@@ -48,10 +54,13 @@ export function ExercisePickerModal({
   visible,
   onClose,
   onSelect,
+  initialMuscle,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (exercise: Exercise) => void;
+  /** Open already filtered to this body part (used when filling a body-part slot). */
+  initialMuscle?: MuscleGroup;
 }) {
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
@@ -63,6 +72,13 @@ export function ExercisePickerModal({
   const [newMuscle, setNewMuscle] = useState<MuscleGroup>('chest');
   const [newCategory, setNewCategory] = useState<ExerciseCategory>('barbell');
   const [newForce, setNewForce] = useState<ExerciseForce>('push');
+
+  useEffect(() => {
+    if (visible && initialMuscle) {
+      setSearch('');
+      setSelectedMuscle(initialMuscle);
+    }
+  }, [visible, initialMuscle]);
 
   useEffect(() => {
     if (visible) {
@@ -77,7 +93,7 @@ export function ExercisePickerModal({
   const filtered = search
     ? searchExercises(search)
     : selectedMuscle
-    ? exercises.filter(e => e.primaryMuscle === selectedMuscle)
+    ? exercises.filter(e => (MUSCLE_FAMILY[selectedMuscle] ?? [selectedMuscle]).includes(e.primaryMuscle))
     : exercises;
 
   const handleCreate = async () => {

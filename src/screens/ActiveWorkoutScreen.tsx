@@ -19,6 +19,7 @@ import { RestTimerBar } from '../components/RestTimer';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
 import { getProfile } from '../utils/storage';
+import { MUSCLE_GROUP_LABELS } from '../data/exercises';
 import {
   formatTimer,
   formatWeight,
@@ -36,11 +37,18 @@ export function ActiveWorkoutScreen({ navigation }: any) {
     addExercise,
     reorderExercise,
     toggleSuperset,
+    pickForSlot,
+    changeSlotCount,
     newPRs,
     clearPRs,
   } = useWorkout();
   const [elapsed, setElapsed] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [pickingSlot, setPickingSlot] = useState<string | null>(null);
+  // A second tap on Finish while the first save is still running used to
+  // write the workout twice (hence duplicate entries in History). Declared
+  // before the early return below so the hook order never changes.
+  const finishing = useRef(false);
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [workoutName, setWorkoutName] = useState('');
@@ -133,9 +141,6 @@ export function ActiveWorkoutScreen({ navigation }: any) {
     0
   );
 
-  // A second tap on Finish while the first save is still running used to
-  // write the workout twice (hence duplicate entries in History).
-  const finishing = useRef(false);
   const handleFinish = async () => {
     if (finishing.current) return;
     finishing.current = true;
@@ -219,16 +224,41 @@ export function ActiveWorkoutScreen({ navigation }: any) {
       {/* Rest Timer — pinned to top so keyboard doesn't cover it */}
       <RestTimerBar />
 
+      {/* Android already resizes the screen for the keyboard; adjusting again made scrolling jump. */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={Platform.OS === 'ios'}
       >
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
+          {(activeWorkout.toPick ?? []).length > 0 && (
+            <View style={pickStyles.card}>
+              <Text style={pickStyles.title}>Choose your exercises</Text>
+              {(activeWorkout.toPick ?? []).map(slot => (
+                <View key={slot.id} style={pickStyles.row}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={pickStyles.part}>{MUSCLE_GROUP_LABELS[slot.muscle]}</Text>
+                    <Text style={pickStyles.meta}>{slot.count} to choose · {slot.sets} sets each</Text>
+                  </View>
+                  <Pressable onPress={() => changeSlotCount(slot.id, -1)} hitSlop={8} style={pickStyles.step}>
+                    <Ionicons name="remove" size={18} color={Colors.text} />
+                  </Pressable>
+                  <Pressable onPress={() => changeSlotCount(slot.id, 1)} hitSlop={8} style={pickStyles.step}>
+                    <Ionicons name="add" size={18} color={Colors.text} />
+                  </Pressable>
+                  <Pressable onPress={() => setPickingSlot(slot.id)} style={pickStyles.choose}>
+                    <Text style={pickStyles.chooseText}>Choose</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+
           {activeWorkout.exercises.map((we, idx) => {
             const nextExercise = activeWorkout.exercises[idx + 1];
             const prevExercise = activeWorkout.exercises[idx - 1];
@@ -302,11 +332,14 @@ export function ActiveWorkoutScreen({ navigation }: any) {
 
       {/* Exercise Picker Modal */}
       <ExercisePickerModal
-        visible={showExercisePicker}
-        onClose={() => setShowExercisePicker(false)}
+        visible={showExercisePicker || pickingSlot !== null}
+        initialMuscle={pickingSlot ? activeWorkout.toPick?.find(s => s.id === pickingSlot)?.muscle : undefined}
+        onClose={() => { setShowExercisePicker(false); setPickingSlot(null); }}
         onSelect={exercise => {
-          addExercise(exercise);
+          if (pickingSlot) pickForSlot(pickingSlot, exercise);
+          else addExercise(exercise);
           setShowExercisePicker(false);
+          setPickingSlot(null);
         }}
       />
 
@@ -504,3 +537,40 @@ const ssStyles = StyleSheet.create({
   },
 });
 
+const pickStyles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.bgCard,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  title: { color: Colors.text, fontSize: FontSize.lg, fontWeight: '700' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  part: { color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
+  meta: { color: Colors.textSecondary, fontSize: FontSize.xs, marginTop: 2 },
+  step: {
+    width: 34,
+    height: 34,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choose: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  chooseText: { color: Colors.textInverse, fontWeight: '700', fontSize: FontSize.sm },
+});

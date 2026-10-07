@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createRef, useImperativeHandle } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Alert, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { WorkoutExercise, WorkoutSet, Exercise } from '../types';
@@ -192,7 +192,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
       )}
 
       {/* Sticky Note */}
-      {!collapsed && stickyNote && !editingNote && (
+      {!collapsed && !!stickyNote && !editingNote && (
         <Pressable
           onPress={() => { setNoteInput(stickyNote); setEditingNote(true); }}
           style={styles.stickyNote}
@@ -236,6 +236,10 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
 
       {!collapsed && (
         <>
+          {previousData.length > 0 && (
+            <Text style={styles.ghostHint}>Faded numbers are last time. Tick a set to use them.</Text>
+          )}
+
           {/* Column headers */}
           <View style={styles.columnHeaders}>
             <Text style={[styles.colHeader, { width: 24 }]}>SET</Text>
@@ -255,9 +259,13 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
               ref={setRowRefs.current[idx]}
               set={set}
               onUpdate={data => updateSet(workoutExercise.id, set.id, data)}
-              onComplete={() => {
+              onComplete={fromKeyboard => {
                 completeSet(workoutExercise.id, set.id);
-                if (!set.completed) {
+                if (!set.completed && !fromKeyboard) {
+                  // Ticked by hand: put the keyboard away and leave it away.
+                  Keyboard.dismiss();
+                } else if (!set.completed) {
+                  // Finished with Enter while typing: carry on to the next set.
                   if (onSetCompleted) {
                     // Let parent handle focus (supports superset navigation)
                     onSetCompleted(workoutExercise.id, idx);
@@ -361,6 +369,12 @@ const styles = StyleSheet.create({
   },
   removeBtn: {
     padding: 2,
+  },
+  ghostHint: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.xs,
   },
   columnHeaders: {
     flexDirection: 'row',

@@ -21,7 +21,7 @@ import { importTemplatesJSON } from '../utils/importTemplates';
 import { readPickedFile } from '../utils/export';
 import * as DocumentPicker from 'expo-document-picker';
 import { EXERCISE_MAP } from '../data/exercises';
-import { exercisesFromTemplate } from '../utils/startTemplate';
+import { exercisesFromTemplate, toPickFromTemplate, bodyPartsLine } from '../utils/startTemplate';
 import { DEFAULT_TEMPLATES } from '../data/templates';
 import {
   formatDuration,
@@ -55,7 +55,7 @@ export function TemplatesScreen({ navigation }: any) {
 
   const handleStartFromTemplate = (template: WorkoutTemplate) => {
     const exercises = exercisesFromTemplate(template);
-    startOrReplace({ isWorkoutActive, discardWorkout, navigation, start: () => startWorkout(template.name, exercises) });
+    startOrReplace({ isWorkoutActive, discardWorkout, navigation, start: () => startWorkout(template.name, exercises, toPickFromTemplate(template)) });
   };
 
   return (
@@ -190,6 +190,9 @@ export function TemplatesScreen({ navigation }: any) {
                     </View>
                   );
                 })}
+                {template.bodyParts && template.bodyParts.length > 0 ? (
+                  <Text style={styles.exerciseItem}>Choose on the day: {bodyPartsLine(template.bodyParts)}</Text>
+                ) : null}
               </View>
 
               <View style={styles.templateMuscles}>

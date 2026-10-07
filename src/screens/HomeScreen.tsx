@@ -15,10 +15,11 @@ import { useWorkout } from '../context/WorkoutContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
-import { getWorkouts, getProfile, getPRs, getTemplates, getPlanOverrides, setPlanOverride, saveTemplate } from '../utils/storage';
-import { PlanOverrides, REST, dateKey, planFor } from '../utils/plan';
+import { getWorkouts, getProfile, getPRs, getTemplates, getPlanOverrides } from '../utils/storage';
+import { PlanOverrides, dateKey, planFor, plannedOn } from '../utils/plan';
+import { planDay, backToWeekly } from '../utils/planActions';
 import { PlanSheet } from '../components/PlanSheet';
-import { exercisesFromTemplate } from '../utils/startTemplate';
+import { exercisesFromTemplate, toPickFromTemplate, templateLine } from '../utils/startTemplate';
 import { startOrReplace } from '../utils/startFlow';
 import { WeekStrip } from '../components/WeekStrip';
 import {
@@ -228,7 +229,7 @@ export function HomeScreen({ navigation }: any) {
             isWorkoutActive,
             discardWorkout,
             navigation,
-            start: () => startWorkout(t.name, exercisesFromTemplate(t)),
+            start: () => startWorkout(t.name, exercisesFromTemplate(t), toPickFromTemplate(t)),
           })}
           onPickDay={d => setPicking(d)}
         />
@@ -307,32 +308,18 @@ export function HomeScreen({ navigation }: any) {
         date={picking}
         templates={templates}
         current={picking ? planFor(picking, templates, overrides) : null}
+        isOnce={picking ? !!overrides[dateKey(picking)] : false}
+        weekly={picking ? plannedOn(templates, picking.getDay())[0] ?? null : null}
         onClose={() => setPicking(null)}
-        onPick={async (t, everyWeek) => {
+        onSet={async (t, everyWeek) => {
           if (!picking) return;
-          if (everyWeek) {
-            const dow = picking.getDay();
-            for (const other of templates) {
-              const has = (other.days ?? []).includes(dow);
-              if (other.id === t.id && !has) await saveTemplate({ ...other, days: [...(other.days ?? []), dow] });
-              if (other.id !== t.id && has) await saveTemplate({ ...other, days: (other.days ?? []).filter(x => x !== dow) });
-            }
-            await setPlanOverride(dateKey(picking), null);
-          } else {
-            await setPlanOverride(dateKey(picking), t.id);
-          }
+          await planDay(picking, t, everyWeek, templates);
           setPicking(null);
           loadData();
         }}
-        onRest={async everyWeek => {
+        onBackToWeekly={async () => {
           if (!picking) return;
-          if (everyWeek) {
-            const dow = picking.getDay();
-            for (const t of templates) if ((t.days ?? []).includes(dow)) await saveTemplate({ ...t, days: (t.days ?? []).filter(x => x !== dow) });
-            await setPlanOverride(dateKey(picking), null);
-          } else {
-            await setPlanOverride(dateKey(picking), REST);
-          }
+          await backToWeekly(picking);
           setPicking(null);
           loadData();
         }}
@@ -358,7 +345,7 @@ export function HomeScreen({ navigation }: any) {
                       isWorkoutActive,
                       discardWorkout,
                       navigation,
-                      start: () => startWorkout(t.name, exercisesFromTemplate(t)),
+                      start: () => startWorkout(t.name, exercisesFromTemplate(t), toPickFromTemplate(t)),
                     });
                   }}
                   style={({ pressed }) => [sheetStyles.row, pressed && { opacity: 0.7 }]}
@@ -366,7 +353,7 @@ export function HomeScreen({ navigation }: any) {
                   <View style={{ flex: 1 }}>
                     <Text style={sheetStyles.rowTitle}>{t.name}</Text>
                     <Text style={sheetStyles.rowMeta} numberOfLines={1}>
-                      {t.exercises.map(te => EXERCISE_MAP.get(te.exerciseId)?.name ?? '?').join(' · ')}
+                      {templateLine(t)}
                     </Text>
                   </View>
                   <Text style={sheetStyles.rowGo}>Start</Text>

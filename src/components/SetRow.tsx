@@ -7,7 +7,8 @@ import { Colors, BorderRadius, Spacing, FontSize } from '../theme/colors';
 interface SetRowProps {
   set: WorkoutSet;
   onUpdate: (data: Partial<WorkoutSet>) => void;
-  onComplete: () => void;
+  /** fromKeyboard: the set was finished with Enter on the keyboard, so typing can carry on. */
+  onComplete: (fromKeyboard?: boolean) => void;
   onRemove: () => void;
   showRPE?: boolean;
   unit: string;
@@ -24,6 +25,7 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(
   ref
 ) {
   const weightRef = useRef<TextInput>(null);
+  const repsRef = useRef<TextInput>(null);
   const [weightText, setWeightText] = useState(set.weight > 0 ? String(set.weight) : '');
   const [repsText, setRepsText] = useState(set.reps > 0 ? String(set.reps) : '');
   const [rpeText, setRpeText] = useState(set.rpe ? String(set.rpe) : '');
@@ -43,6 +45,17 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(
   useEffect(() => {
     setRpeText(set.rpe ? String(set.rpe) : '');
   }, [set.rpe]);
+
+  // Ticking an empty set uses last time's numbers, so a repeat set needs no typing.
+  const complete = (fromKeyboard?: boolean) => {
+    if (!set.completed) {
+      const patch: Partial<WorkoutSet> = {};
+      if (!weightText && previousWeight !== undefined && previousWeight !== 0) patch.weight = previousWeight;
+      if (!repsText && previousReps) patch.reps = previousReps;
+      if (Object.keys(patch).length > 0) onUpdate(patch);
+    }
+    onComplete(fromKeyboard);
+  };
 
   return (
     <View style={[styles.row, set.completed && styles.completedRow]}>
@@ -70,7 +83,7 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(
 
       <TextInput
         ref={weightRef}
-        style={styles.input}
+        style={[styles.input, !weightText && styles.inputGhost]}
         value={weightText}
         onChangeText={t => {
           // Allow optional leading minus, then digits and a single dot
@@ -81,15 +94,19 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(
           onUpdate({ weight: parseFloat(cleaned) || 0 });
         }}
         placeholder={previousWeight ? String(previousWeight) : unit}
-        placeholderTextColor={previousWeight ? Colors.textSecondary : Colors.textTertiary}
-        keyboardType="numbers-and-punctuation"
+        placeholderTextColor={GHOST}
+        keyboardType="numeric"
+        returnKeyType="next"
+        blurOnSubmit={false}
+        onSubmitEditing={() => repsRef.current?.focus()}
         selectTextOnFocus
       />
 
       <Text style={styles.x}>×</Text>
 
       <TextInput
-        style={styles.input}
+        ref={repsRef}
+        style={[styles.input, !repsText && styles.inputGhost]}
         value={repsText}
         onChangeText={t => {
           const cleaned = t.replace(/[^0-9]/g, '');
@@ -97,8 +114,10 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(
           onUpdate({ reps: parseInt(cleaned) || 0 });
         }}
         placeholder={previousReps ? String(previousReps) : 'reps'}
-        placeholderTextColor={previousReps ? Colors.textSecondary : Colors.textTertiary}
-        keyboardType="numeric"
+        placeholderTextColor={GHOST}
+        keyboardType="number-pad"
+        returnKeyType="done"
+        onSubmitEditing={() => complete(true)}
         selectTextOnFocus
       />
 
@@ -121,7 +140,8 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(
       )}
 
       <Pressable
-        onPress={onComplete}
+        onPress={() => complete(false)}
+        hitSlop={8}
         style={[styles.checkBtn, set.completed && styles.checkBtnDone]}
       >
         <Ionicons
@@ -137,6 +157,9 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(
     </View>
   );
 });
+
+/** Last time's numbers: dim, thin and italic, so they never read as typed. */
+const GHOST = '#5A5A5A';
 
 const styles = StyleSheet.create({
   row: {
@@ -178,6 +201,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.borderLight,
     minWidth: 60,
+  },
+  inputGhost: {
+    fontWeight: '400',
+    fontStyle: 'italic',
+    fontSize: FontSize.md,
+    borderStyle: 'dashed',
+    borderColor: Colors.border,
   },
   rpeInput: {
     maxWidth: 55,
