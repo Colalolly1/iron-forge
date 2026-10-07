@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, createRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, createRef } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { NumPad, PadApi, PadContext, PadTarget, applyKey, parsePad } from '../components/NumPad';
 import { Ionicons } from '@expo/vector-icons';
 import { useWorkout } from '../context/WorkoutContext';
 import { ExerciseCard, ExerciseCardRef } from '../components/ExerciseCard';
@@ -53,6 +54,49 @@ export function ActiveWorkoutScreen({ navigation }: any) {
   const [workoutName, setWorkoutName] = useState('');
   const cardRefs = useRef<Map<string, React.RefObject<ExerciseCardRef | null>>>(new Map());
 
+  // ─── The set-entry pad (replaces the phone keyboard for weights and reps) ───
+  const insets = useSafeAreaInsets();
+  const [padTarget, setPadTarget] = useState<PadTarget | null>(null);
+  const [padBuffer, setPadBuffer] = useState('');
+  const padFresh = useRef(true);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollY = useRef(0);
+  const listRef = useRef<View>(null);
+  const padApi = useMemo<PadApi>(() => ({
+    activeKey: padTarget?.key ?? null,
+    buffer: padBuffer,
+    open: t => {
+      setPadTarget(t);
+      setPadBuffer(t.value ? String(t.value) : '');
+      padFresh.current = true; // the first key replaces what's there
+    },
+    close: () => setPadTarget(null),
+    ensureVisible: (top, bottom) => {
+      listRef.current?.measureInWindow((_x, y, _w, h) => {
+        const visTop = y;
+        const visBottom = y + h;
+        if (bottom > visBottom - 24) {
+          scrollRef.current?.scrollTo({ y: scrollY.current + (bottom - visBottom) + 40, animated: false });
+        } else if (top < visTop + 8) {
+          scrollRef.current?.scrollTo({ y: Math.max(0, scrollY.current - (visTop - top) - 24), animated: false });
+        }
+      });
+    },
+  }), [padTarget, padBuffer]);
+
+  const onPadKey = (k: string) => {
+    const t = padTarget;
+    if (!t) return;
+    if (k === 'hide') { setPadTarget(null); return; }
+    if (k === 'next') { t.onNext(); return; }
+    if (k === 'done') { t.onDone(); return; }
+    const next = applyKey(k, padBuffer, padFresh.current, t);
+    if (next === null) return;
+    padFresh.current = false;
+    setPadBuffer(next);
+    t.onInput(parsePad(next, t.kind));
+  };
+
   // Get or create a ref for an exercise card
   const getCardRef = useCallback((exerciseId: string) => {
     if (!cardRefs.current.has(exerciseId)) {
@@ -90,12 +134,15 @@ export function ActiveWorkoutScreen({ navigation }: any) {
           return;
         }
       }
+      setPadTarget(null); // nothing left in this superset
     } else {
       // Non-superset: focus next uncompleted set in same exercise
       const nextIdx = exercise.sets.findIndex((s, i) => i > setIdx && !s.completed);
       if (nextIdx >= 0) {
         const ref = cardRefs.current.get(exerciseId);
         ref?.current?.focusSet(nextIdx);
+      } else {
+        setPadTarget(null); // last set of this exercise: put the pad away
       }
     }
   }, [activeWorkout]);
@@ -188,6 +235,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
   const unit = profile?.weightUnit ?? 'lbs';
 
   return (
+    <PadContext.Provider value={padApi}>
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Top bar */}
       <View style={styles.topBar}>
@@ -207,6 +255,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
               Alert.alert('Not done yet', `${left.join('\n')}\n\nFinish every target to end the workout.`);
               return;
             }
+            setPadTarget(null);
             setShowFinishModal(true);
           }}
           style={[styles.finishBtn, progress.some(p => !p.done) && styles.finishBtnLocked]}
@@ -242,11 +291,15 @@ export function ActiveWorkoutScreen({ navigation }: any) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         enabled={Platform.OS === 'ios'}
       >
+        <View ref={listRef} collapsable={false} style={{ flex: 1 }}>
         <ScrollView
+          ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
         >
           {progress.length > 0 && (
             <View style={pickStyles.card}>
@@ -268,7 +321,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
                       <Text style={pickStyles.doneText}>Done</Text>
                     </View>
                   ) : p.chosen < p.exercisesNeeded ? (
-                    <Pressable onPress={() => setPickingTarget(p.id)} style={pickStyles.choose}>
+                    <Pressable onPress={() => { setPadTarget(null); setPickingTarget(p.id); }} style={pickStyles.choose}>
                       <Text style={pickStyles.chooseText}>Choose</Text>
                     </Pressable>
                   ) : null}
@@ -334,7 +387,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
 
           <Button
             title="Add Exercise"
-            onPress={() => setShowExercisePicker(true)}
+            onPress={() => { setPadTarget(null); setShowExercisePicker(true); }}
             variant="secondary"
             size="lg"
             fullWidth
@@ -351,7 +404,14 @@ export function ActiveWorkoutScreen({ navigation }: any) {
 
           <View style={{ height: 120 }} />
         </ScrollView>
+        </View>
       </KeyboardAvoidingView>
+
+      {padTarget && (
+        <View style={{ paddingBottom: insets.bottom }}>
+          <NumPad target={padTarget} onKey={onPadKey} />
+        </View>
+      )}
 
       {/* Exercise Picker Modal */}
       <ExercisePickerModal
@@ -398,6 +458,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
         </View>
       </Modal>
     </SafeAreaView>
+    </PadContext.Provider>
   );
 }
 

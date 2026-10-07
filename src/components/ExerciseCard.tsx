@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { WorkoutExercise, WorkoutSet, Exercise, BodyPart } from '../types';
 import { SetRow, SetRowRef } from './SetRow';
+import { usePad } from './NumPad';
 import { MuscleGroupBadge } from './MuscleGroupBadge';
 import { ExercisePickerModal } from './ExercisePickerModal';
 import { useWorkout } from '../context/WorkoutContext';
@@ -45,6 +46,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
   const [restInput, setRestInput] = useState('90');
 
   const exercise = workoutExercise.exercise;
+  const pad = usePad();
 
   // Refs for each SetRow to enable auto-focus on next set
   const setRowRefs = useRef<React.RefObject<SetRowRef>[]>([]);
@@ -240,20 +242,19 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
 
       {!collapsed && (
         <>
-          {previousData.length > 0 && (
-            <Text style={styles.ghostHint}>Faded numbers are last time. Tick a set to use them.</Text>
-          )}
+          <Text style={styles.ghostHint}>
+            {previousData.length > 0 ? 'Faded numbers are last time; tick a set to use them. ' : ''}
+            Tap a set number for warm-up, hold it to delete.
+          </Text>
 
           {/* Column headers */}
           <View style={styles.columnHeaders}>
-            <Text style={[styles.colHeader, { width: 30 }]} numberOfLines={1}>SET</Text>
-            <View style={{ width: 20 }} />
+            <Text style={[styles.colHeader, { width: 34 }]} numberOfLines={1}>SET</Text>
             <Text style={[styles.colHeader, { flex: 1 }]}>{unit.toUpperCase()}</Text>
             <View style={{ width: 12 }} />
             <Text style={[styles.colHeader, { flex: 1 }]}>REPS</Text>
             {showRPE && <Text style={[styles.colHeader, { width: 55 }]}>RPE</Text>}
-            <View style={{ width: 34 }} />
-            <View style={{ width: 24 }} />
+            <View style={{ width: 38 }} />
           </View>
 
           {/* Sets */}
@@ -263,13 +264,13 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
               ref={setRowRefs.current[idx]}
               set={set}
               onUpdate={data => updateSet(workoutExercise.id, set.id, data)}
-              onComplete={fromKeyboard => {
+              onComplete={fromPad => {
                 completeSet(workoutExercise.id, set.id);
-                if (!set.completed && !fromKeyboard) {
-                  // Ticked by hand: put the keyboard away and leave it away.
+                if (!set.completed && !fromPad) {
+                  // Ticked by hand: put any keyboard away and leave it away.
                   Keyboard.dismiss();
                 } else if (!set.completed) {
-                  // Finished with Enter while typing: carry on to the next set.
+                  // Finished with the pad's Done: carry on to the next set.
                   if (onSetCompleted) {
                     // Let parent handle focus (supports superset navigation)
                     onSetCompleted(workoutExercise.id, idx);
@@ -278,6 +279,8 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
                     const nextIdx = workoutExercise.sets.findIndex((s, i) => i > idx && !s.completed);
                     if (nextIdx >= 0) {
                       setTimeout(() => setRowRefs.current[nextIdx]?.current?.focusWeight(), 100);
+                    } else {
+                      pad?.close();
                     }
                   }
                 }
@@ -297,6 +300,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
               unit={unit}
               previousWeight={previousData[idx]?.weight}
               previousReps={previousData[idx]?.reps}
+              exerciseName={exercise.name}
             />
           ))}
 
