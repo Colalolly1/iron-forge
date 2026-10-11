@@ -8,8 +8,7 @@ import { usePad } from './NumPad';
 interface SetRowProps {
   set: WorkoutSet;
   onUpdate: (data: Partial<WorkoutSet>) => void;
-  /** fromPad: finished with the pad's Done key, so entry carries on to the next set. */
-  onComplete: (fromPad?: boolean) => void;
+  onComplete: () => void;
   onRemove: () => void;
   showRPE?: boolean;
   unit: string;
@@ -51,7 +50,7 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(props, 
       if (!p.set.reps && p.previousReps) patch.reps = p.previousReps;
       if (Object.keys(patch).length > 0) p.onUpdate(patch);
     }
-    p.onComplete(fromPad);
+    p.onComplete();
   };
 
   const openField = (kind: 'weight' | 'reps') => {

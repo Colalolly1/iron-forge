@@ -22,7 +22,7 @@ import { readPickedFile } from '../utils/export';
 import * as DocumentPicker from 'expo-document-picker';
 import { EXERCISE_MAP } from '../data/exercises';
 import { exercisesFromTemplate, targetsFromTemplate } from '../utils/startTemplate';
-import { BODY_PART_LABELS } from '../utils/bodyParts';
+import { BODY_PART_LABELS, slotSets } from '../utils/bodyParts';
 import { DEFAULT_TEMPLATES } from '../data/templates';
 import {
   formatDuration,
@@ -145,7 +145,6 @@ export function TemplatesScreen({ navigation }: any) {
         {templates.map(template => (
           <View key={template.id} style={styles.templateCard}>
               <View style={styles.templateHeader}>
-                <Text style={styles.templateIcon}>{template.icon}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.templateName}>
                     {template.name}
@@ -202,7 +201,7 @@ export function TemplatesScreen({ navigation }: any) {
                 })}
                 {template.kind === 'targets' && (template.targets ?? []).map(t => (
                   <Text key={t.part} style={styles.exerciseItem}>
-                    {BODY_PART_LABELS[t.part]}: {t.exercises} exercise{t.exercises === 1 ? '' : 's'} × {t.sets} sets{t.reps ? ` · ${t.reps} reps` : ''}
+                    {BODY_PART_LABELS[t.part]}: {t.exercises} exercise{t.exercises === 1 ? '' : 's'}{slotSets(t).every(s => s === t.sets) ? ` × ${t.sets} sets` : `, ${slotSets(t).join(' + ')} sets`}{t.reps ? ` · ${t.reps} reps` : ''}
                   </Text>
                 ))}
               </View>

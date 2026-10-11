@@ -80,7 +80,10 @@ export type BodyPart =
 export interface BodyPartTarget {
   part: BodyPart;
   exercises: number;
+  /** Sets for every exercise, unless setsPer gives each its own. */
   sets: number;
+  /** Sets for each exercise (first, second, ...), when they differ. */
+  setsPer?: number[];
   /** Rep target shown as a guide, e.g. "8-12". */
   reps?: string;
 }
@@ -166,6 +169,7 @@ export interface UserProfile {
   weightUnit: 'kg' | 'lbs';
   measurementUnit: 'cm' | 'in';
   restTimerDefault: number;    // seconds
+  weeklyGoal?: number;         // sessions per week, shown on Home (3 when unset)
   theme: 'dark' | 'light';
   startOfWeek: 0 | 1;         // 0=Sunday, 1=Monday
   showRPE: boolean;

@@ -30,6 +30,7 @@ export function ProfileScreen({ navigation }: any) {
   const [showMeasurementForm, setShowMeasurementForm] = useState(false);
   const [newMeasurement, setNewMeasurement] = useState<Partial<BodyMeasurement>>({});
   const [restTimerText, setRestTimerText] = useState('');
+  const [weeklyGoalText, setWeeklyGoalText] = useState('3');
 
   useEffect(() => {
     loadData();
@@ -39,6 +40,7 @@ export function ProfileScreen({ navigation }: any) {
     const [p, m] = await Promise.all([getProfile(), getMeasurements()]);
     setProfile(p);
     setRestTimerText(String(p.restTimerDefault));
+    setWeeklyGoalText(String(p.weeklyGoal ?? 3));
     setMeasurements(m);
   };
 
@@ -166,6 +168,21 @@ export function ProfileScreen({ navigation }: any) {
         {/* Workout Settings */}
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>Workout</Text>
+
+          <View style={styles.field}>
+            <Text style={styles.label}>Sessions per week (shown on Home)</Text>
+            <TextInput
+              style={styles.input}
+              value={weeklyGoalText}
+              onChangeText={t => setWeeklyGoalText(t.replace(/[^0-9]/g, ''))}
+              onBlur={() => {
+                const val = Math.min(14, parseInt(weeklyGoalText) || 3);
+                setWeeklyGoalText(String(val));
+                updateProfile({ weeklyGoal: val });
+              }}
+              keyboardType="numeric"
+            />
+          </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Default Rest Timer (seconds)</Text>

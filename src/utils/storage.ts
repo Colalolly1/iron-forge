@@ -236,6 +236,7 @@ export const DEFAULT_PROFILE: UserProfile = {
   weightUnit: 'lbs',
   measurementUnit: 'in',
   restTimerDefault: 90,
+  weeklyGoal: 3,
   theme: 'dark',
   startOfWeek: 1,
   showRPE: true,
@@ -275,6 +276,19 @@ export async function getPreviousExerciseData(exerciseId: string): Promise<Previ
     }
   }
   return [];
+}
+
+/** When each exercise was last done (start time of the latest workout with a ticked working set). */
+export async function getLastUsed(): Promise<Record<string, string>> {
+  const last: Record<string, string> = {};
+  for (const w of await getWorkouts()) {
+    for (const we of w.exercises) {
+      if (!we.sets.some(s => s.completed && !s.isWarmup)) continue;
+      const prev = last[we.exerciseId];
+      if (!prev || new Date(w.startTime).getTime() > new Date(prev).getTime()) last[we.exerciseId] = w.startTime;
+    }
+  }
+  return last;
 }
 
 // ─── Custom Exercises ────────────────────────────────────────

@@ -14,8 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { MuscleGroupBadge } from './MuscleGroupBadge';
 import { getAllExercises, searchExercises, MUSCLE_GROUP_LABELS, registerCustomExercises } from '../data/exercises';
-import { getMuscleGroupColor, generateId } from '../utils/helpers';
-import { getCustomExercises, saveCustomExercise } from '../utils/storage';
+import { getMuscleGroupColor, generateId, getRelativeTime } from '../utils/helpers';
+import { getCustomExercises, saveCustomExercise, getLastUsed } from '../utils/storage';
 import { Exercise, MuscleGroup, ExerciseCategory, ExerciseForce, BodyPart } from '../types';
 import { bodyPartOf, BODY_PART_LABELS } from '../utils/bodyParts';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
@@ -67,6 +67,7 @@ export function ExercisePickerModal({
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [lastUsed, setLastUsed] = useState<Record<string, string>>({});
 
   // Create form state
   const [newName, setNewName] = useState('');
@@ -89,17 +90,24 @@ export function ExercisePickerModal({
         registerCustomExercises(custom);
         setRefreshKey(k => k + 1);
       });
+      getLastUsed().then(setLastUsed);
     }
   }, [visible]);
 
   const exercises = getAllExercises();
-  const filtered = part
+  const matching = part
     ? (search ? searchExercises(search) : exercises).filter(e => bodyPartOf(e) === part)
     : search
     ? searchExercises(search)
     : selectedMuscle
     ? exercises.filter(e => (MUSCLE_FAMILY[selectedMuscle] ?? [selectedMuscle]).includes(e.primaryMuscle))
     : exercises;
+  // Most recently done first; the rest keep their usual order.
+  const usedAt = (e: Exercise) => (lastUsed[e.id] ? new Date(lastUsed[e.id]).getTime() : 0);
+  const filtered = matching
+    .map((e, i) => ({ e, i, t: usedAt(e) }))
+    .sort((a, b) => b.t - a.t || a.i - b.i)
+    .map(x => x.e);
 
   const handleCreate = async () => {
     if (!newName.trim()) {
@@ -311,6 +319,9 @@ export function ExercisePickerModal({
                       <Text style={styles.exerciseCategory}>
                         {item.category.replace('_', ' ')}
                       </Text>
+                      {lastUsed[item.id] ? (
+                        <Text style={styles.lastUsed}>Last done {getRelativeTime(lastUsed[item.id])}</Text>
+                      ) : null}
                     </View>
                   </View>
                   <Ionicons name="add-circle" size={28} color={Colors.primary} />
@@ -495,5 +506,10 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     fontSize: FontSize.xs,
     textTransform: 'capitalize',
+  },
+  lastUsed: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
   },
 });

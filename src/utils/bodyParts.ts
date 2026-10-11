@@ -40,16 +40,32 @@ export function muscleOfPart(part: BodyPart): MuscleGroup {
   return part;
 }
 
-/** "Chest 2×3 · Back 2×3" (exercises × sets) */
+/** Sets for each of a target's exercises, e.g. [4, 3]. */
+export function slotSets(t: BodyPartTarget): number[] {
+  return Array.from({ length: t.exercises }, (_, k) => t.setsPer?.[k] ?? t.sets);
+}
+
+/** Sets for the target's k-th chosen exercise; extras get the last one's. */
+export function setsForSlot(t: BodyPartTarget, k: number): number {
+  const per = slotSets(t);
+  return per[Math.min(k, per.length - 1)] ?? t.sets;
+}
+
+/** "2×3" when every exercise has the same sets, else "4+3". */
+export function setsText(t: BodyPartTarget): string {
+  const per = slotSets(t);
+  return per.every(s => s === per[0]) ? `${t.exercises}×${per[0] ?? t.sets}` : per.join('+');
+}
+
+/** "Chest 2×3 · Back 4+3" (exercises × sets, or each exercise's sets) */
 export function targetsLine(targets: BodyPartTarget[] | undefined): string {
-  return (targets ?? []).map(t => `${BODY_PART_LABELS[t.part]} ${t.exercises}×${t.sets}`).join(' · ');
+  return (targets ?? []).map(t => `${BODY_PART_LABELS[t.part]} ${setsText(t)}`).join(' · ');
 }
 
 export interface TargetProgress {
   id: string;
   part: BodyPart;
   exercisesNeeded: number;
-  setsEach: number;
   reps?: string;
   chosen: number;
   exercisesDone: number;
@@ -59,30 +75,45 @@ export interface TargetProgress {
 }
 
 /**
+ * The target an exercise added with Add Exercise counts toward: the first one
+ * for its body part that still needs exercises, else the first for that part.
+ */
+export function targetForExercise(workout: Workout, exercise: Exercise): (BodyPartTarget & { id: string }) | undefined {
+  const part = bodyPartOf(exercise);
+  const matching = (workout.targets ?? []).filter(t => t.part === part);
+  return matching.find(t => workout.exercises.filter(we => we.targetId === t.id).length < t.exercises) ?? matching[0];
+}
+
+/**
  * How far each target has got. An exercise counts for a target when it was
- * chosen for it and still trains that body part; it's done when it has the
- * required number of ticked working sets.
+ * chosen for it (or has no target and trains that body part) and still trains
+ * that body part. The exercise with the most ticked working sets is measured
+ * against the biggest set count, the next against the next, and so on.
  */
 export function targetProgress(workout: Workout): TargetProgress[] {
-  return (workout.targets ?? []).map(t => {
-    const mine = workout.exercises.filter(we => we.targetId === t.id && bodyPartOf(we.exercise) === t.part);
+  const targets = workout.targets ?? [];
+  return targets.map(t => {
+    // Exercises with no target go to the first target for their body part.
+    const takesLoose = targets.find(x => x.part === t.part)?.id === t.id;
+    const mine = workout.exercises.filter(we =>
+      bodyPartOf(we.exercise) === t.part && (we.targetId === t.id || (!we.targetId && takesLoose)));
     const counts = mine
       // Only ticked working sets with reps in them count; an empty tick isn't a set.
       .map(we => we.sets.filter(s => s.completed && !s.isWarmup && s.reps > 0).length)
       .sort((a, b) => b - a)
       .slice(0, t.exercises);
-    const exercisesDone = counts.filter(c => c >= t.sets).length;
-    const setsDone = counts.reduce((n, c) => n + Math.min(c, t.sets), 0);
+    const needed = slotSets(t).sort((a, b) => b - a);
+    const exercisesDone = needed.filter((s, i) => (counts[i] ?? 0) >= s).length;
+    const setsDone = needed.reduce((n, s, i) => n + Math.min(counts[i] ?? 0, s), 0);
     return {
       id: t.id,
       part: t.part,
       exercisesNeeded: t.exercises,
-      setsEach: t.sets,
       reps: t.reps,
       chosen: mine.length,
       exercisesDone,
       setsDone,
-      setsNeeded: t.exercises * t.sets,
+      setsNeeded: needed.reduce((n, s) => n + s, 0),
       done: exercisesDone >= t.exercises,
     };
   });

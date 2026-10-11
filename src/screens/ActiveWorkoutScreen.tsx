@@ -20,12 +20,8 @@ import { RestTimerBar } from '../components/RestTimer';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
 import { getProfile } from '../utils/storage';
-import { BODY_PART_LABELS, targetProgress, whatsLeft } from '../utils/bodyParts';
-import {
-  formatTimer,
-  formatWeight,
-  calculateVolume,
-} from '../utils/helpers';
+import { BODY_PART_LABELS, setsForSlot, targetProgress, whatsLeft } from '../utils/bodyParts';
+import { formatTimer } from '../utils/helpers';
 import { UserProfile, PersonalRecord } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
@@ -181,10 +177,6 @@ export function ActiveWorkoutScreen({ navigation }: any) {
   const progress = targetProgress(activeWorkout);
   const targetById = new Map((activeWorkout.targets ?? []).map(t => [t.id, t]));
 
-  const totalVolume = activeWorkout.exercises.reduce(
-    (sum, e) => sum + calculateVolume(e.sets),
-    0
-  );
   const completedSets = activeWorkout.exercises.reduce(
     (sum, e) => sum + e.sets.filter(s => s.completed && !s.isWarmup).length,
     0
@@ -209,9 +201,9 @@ export function ActiveWorkoutScreen({ navigation }: any) {
         return `${name}\n${detail}`;
       }).join('\n\n');
       Alert.alert(
-        `New PR${prs.length > 1 ? 's' : ''}!`,
+        `New PR${prs.length > 1 ? 's' : ''}`,
         prLines,
-        [{ text: 'Awesome!', onPress: () => navigation.goBack() }]
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } else {
       navigation.goBack();
@@ -275,11 +267,6 @@ export function ActiveWorkoutScreen({ navigation }: any) {
           <Text style={styles.statValue}>{completedSets}</Text>
           <Text style={styles.statLabel}>Sets</Text>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{formatWeight(totalVolume, unit)}</Text>
-          <Text style={styles.statLabel}>Volume</Text>
-        </View>
       </View>
 
       {/* Rest Timer — pinned to top so keyboard doesn't cover it */}
@@ -301,6 +288,10 @@ export function ActiveWorkoutScreen({ navigation }: any) {
           onScroll={e => { scrollY.current = e.nativeEvent.contentOffset.y; }}
           scrollEventThrottle={16}
         >
+          <Text style={styles.tip}>
+            Faded numbers are last time; tick a set to use them. Tap a set number for warm-up, hold it to delete.
+          </Text>
+
           {progress.length > 0 && (
             <View style={pickStyles.card}>
               <View style={pickStyles.titleRow}>
@@ -312,7 +303,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
                   <View style={{ flex: 1 }}>
                     <Text style={[pickStyles.part, p.done && pickStyles.partDone]}>{BODY_PART_LABELS[p.part]}</Text>
                     <Text style={pickStyles.meta}>
-                      {p.chosen}/{p.exercisesNeeded} chosen · {p.setsDone}/{p.setsNeeded} sets{p.reps ? ` · ${p.reps} reps` : ''}
+                      {Math.min(p.chosen, p.exercisesNeeded)}/{p.exercisesNeeded} chosen · {p.setsDone}/{p.setsNeeded} sets{p.reps ? ` · ${p.reps} reps` : ''}
                     </Text>
                   </View>
                   {p.done ? (
@@ -354,7 +345,9 @@ export function ActiveWorkoutScreen({ navigation }: any) {
                     targetPart={we.targetId ? targetById.get(we.targetId)?.part : undefined}
                     targetLabel={(() => {
                       const t = we.targetId ? targetById.get(we.targetId) : undefined;
-                      return t ? `For ${BODY_PART_LABELS[t.part]} · ${t.sets} sets${t.reps ? ` · ${t.reps} reps` : ''}` : undefined;
+                      if (!t) return undefined;
+                      const slot = activeWorkout.exercises.filter(e => e.targetId === t.id).indexOf(we);
+                      return `For ${BODY_PART_LABELS[t.part]} · ${setsForSlot(t, slot)} sets${t.reps ? ` · ${t.reps} reps` : ''}`;
                     })()}
                   />
                 </View>
@@ -442,7 +435,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
 
             <View style={modalStyles.summary}>
               <Text style={modalStyles.summaryText}>
-                {formatTimer(elapsed)} | {completedSets} sets | {formatWeight(totalVolume, unit)} volume
+                {formatTimer(elapsed)} | {completedSets} sets
               </Text>
             </View>
 
@@ -533,6 +526,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
   },
   scroll: { flex: 1 },
+  tip: { color: Colors.textSecondary, fontSize: FontSize.xs },
   content: {
     padding: Spacing.md,
     gap: Spacing.md,

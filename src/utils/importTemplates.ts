@@ -23,12 +23,13 @@ import { fuzzyMatchExercise, createCustomExerciseFromName } from './importStrong
  *   "customExercises": [ { "id", "name", "primaryMuscle", "secondaryMuscles", "category", "force" } ],
  *   "templates": [
  *     {
- *       "name": "Upper 1", "description": "optional", "icon": "🏋️",
+ *       "name": "Upper 1", "description": "optional",
  *       "exercises": [
  *         { "exercise": "Barbell Bench Press", "exerciseId": "bb-bench-press", "sets": 4,
  *           "supersetGroup": "A", "notes": "optional", "targetReps": 8, "targetWeight": 40 }
  *       ],
  *       "type": "targets", "targets": [ { "part": "chest", "exercises": 2, "sets": 3, "reps": "8-12" } ]
+ *       ("setsPer": [4, 3] gives each exercise its own sets; "sets" is then the first one's)
  *       (a targets template has no "exercises"; body parts are chosen on the day)
  *     }
  *   ],
@@ -58,7 +59,7 @@ interface TemplateFileEntry {
   exercises?: TemplateFileExercise[];
   /** Body parts chosen on the day, e.g. { "muscle": "chest", "exercises": 3, "sets": 3 } */
   type?: string;
-  targets?: { part?: string; exercises?: number; sets?: number; reps?: string }[];
+  targets?: { part?: string; exercises?: number; sets?: number; setsPer?: number[]; reps?: string }[];
 }
 
 interface TemplateFileCustomExercise {
@@ -153,12 +154,20 @@ export async function importTemplatesJSON(jsonContent: string): Promise<Template
     }
     const targets: BodyPartTarget[] = fileTargets
       .filter(t => t && typeof t.part === 'string' && t.part in BODY_PART_LABELS)
-      .map(t => ({
-        part: t.part as BodyPart,
-        exercises: Math.max(1, Math.round(Number(t.exercises) || 1)),
-        sets: Math.max(1, Math.round(Number(t.sets) || 3)),
-        ...(t.reps ? { reps: String(t.reps) } : {}),
-      }));
+      .map(t => {
+        const exercises = Math.max(1, Math.round(Number(t.exercises) || 1));
+        const base = Math.max(1, Math.round(Number(t.sets) || Number(t.setsPer?.[0]) || 3));
+        const setsPer = Array.isArray(t.setsPer)
+          ? Array.from({ length: exercises }, (_, k) => Math.max(1, Math.round(Number(t.setsPer![k]) || base)))
+          : undefined;
+        return {
+          part: t.part as BodyPart,
+          exercises,
+          sets: setsPer ? setsPer[0] : base,
+          ...(setsPer && setsPer.some(s => s !== setsPer[0]) ? { setsPer } : {}),
+          ...(t.reps ? { reps: String(t.reps) } : {}),
+        };
+      });
     const isTargets = entry.type === 'targets' || (fileExercises.length === 0 && targets.length > 0);
 
     const templateExercises: WorkoutTemplate['exercises'] = [];
@@ -212,7 +221,7 @@ export async function importTemplatesJSON(jsonContent: string): Promise<Template
       exercises: isTargets ? [] : templateExercises,
       muscleGroups: Array.from(muscleSet),
       ...(isTargets ? { kind: 'targets' as const, targets } : {}),
-      icon: entry.icon || existing?.icon || '📋',
+      icon: entry.icon || existing?.icon,
       color: existing?.color,
       timesUsed: existing?.timesUsed ?? 0,
       lastUsed: existing?.lastUsed,
@@ -319,7 +328,7 @@ export async function exportTemplatesJSON(): Promise<string> {
           };
         }),
         ...(t.kind === 'targets'
-          ? { type: 'targets', targets: (t.targets ?? []).map(x => ({ part: x.part, exercises: x.exercises, sets: x.sets, ...(x.reps ? { reps: x.reps } : {}) })) }
+          ? { type: 'targets', targets: (t.targets ?? []).map(x => ({ part: x.part, exercises: x.exercises, sets: x.sets, ...(x.setsPer ? { setsPer: x.setsPer } : {}), ...(x.reps ? { reps: x.reps } : {}) })) }
           : {}),
       };
     }),

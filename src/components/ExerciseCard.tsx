@@ -5,12 +5,10 @@ import { useNavigation } from '@react-navigation/native';
 import { WorkoutExercise, WorkoutSet, Exercise, BodyPart } from '../types';
 import { SetRow, SetRowRef } from './SetRow';
 import { usePad } from './NumPad';
-import { MuscleGroupBadge } from './MuscleGroupBadge';
 import { ExercisePickerModal } from './ExercisePickerModal';
 import { useWorkout } from '../context/WorkoutContext';
 import { getExerciseNote, saveExerciseNote, getPreviousExerciseData, PreviousSetData, getExerciseRestTimer, saveExerciseRestTimer } from '../utils/storage';
 import { Colors, BorderRadius, Spacing, FontSize } from '../theme/colors';
-import { calculateVolume, formatWeight } from '../utils/helpers';
 
 interface ExerciseCardProps {
   workoutExercise: WorkoutExercise;
@@ -37,6 +35,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
   const { activeWorkout, addSet, updateSet, removeSet, completeSet, removeExercise, replaceExercise, startRestTimer, getExercisesInSuperset } = useWorkout();
   const [showSwapPicker, setShowSwapPicker] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [stickyNote, setStickyNote] = useState('');
   const [editingNote, setEditingNote] = useState(false);
   const [noteInput, setNoteInput] = useState('');
@@ -82,57 +81,46 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
     setEditingNote(false);
   };
   const completedSets = workoutExercise.sets.filter(s => s.completed && !s.isWarmup);
-  const totalVolume = calculateVolume(workoutExercise.sets);
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Header: tap to fold away; Edit holds everything that changes the exercise */}
       <Pressable onPress={() => setCollapsed(!collapsed)} style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.nameRow}>
-            <Text style={styles.exerciseName}>{exercise.name}</Text>
-            <Pressable
-              onPress={() => navigation.navigate('ExerciseHistory', {
-                exerciseId: exercise.id,
-                exerciseName: exercise.name,
-              })}
-              hitSlop={8}
-            >
-              <Ionicons name="analytics-outline" size={18} color={Colors.textSecondary} />
-            </Pressable>
-          </View>
+          <Text style={styles.exerciseName}>{exercise.name}</Text>
           {targetLabel ? <Text style={styles.targetLabel}>{targetLabel}</Text> : null}
-          <View style={styles.badges}>
-            <MuscleGroupBadge muscle={exercise.primaryMuscle} />
-            <Text style={styles.meta}>
-              {completedSets.length}/{workoutExercise.sets.length} sets
-            </Text>
-            {totalVolume > 0 && (
-              <Text style={styles.volume}>
-                {formatWeight(totalVolume, unit)} vol
-              </Text>
-            )}
-          </View>
+          <Text style={styles.meta}>
+            {completedSets.length}/{workoutExercise.sets.length} sets{collapsed ? ' · folded, tap to open' : ''}
+          </Text>
         </View>
-        <View style={styles.headerRight}>
-          {onMoveUp !== undefined && (
-            <Pressable onPress={onMoveUp} hitSlop={6}>
-              <Ionicons name="chevron-up" size={18} color={Colors.text} />
-            </Pressable>
+        <Pressable onPress={() => { setEditing(!editing); setEditingRest(false); }} hitSlop={8} style={styles.editBtn}>
+          <Text style={styles.editText}>{editing ? 'Done' : 'Edit'}</Text>
+        </Pressable>
+      </Pressable>
+
+      {editing && (
+        <View style={styles.editRow}>
+          <EditAction
+            label="History"
+            onPress={() => navigation.navigate('ExerciseHistory', {
+              exerciseId: exercise.id,
+              exerciseName: exercise.name,
+            })}
+          />
+          {onMoveUp !== undefined && <EditAction label="Move up" onPress={onMoveUp} />}
+          {onMoveDown !== undefined && <EditAction label="Move down" onPress={onMoveDown} />}
+          <EditAction label="Swap" onPress={() => setShowSwapPicker(true)} />
+          <EditAction
+            label={`Rest ${restSeconds}s`}
+            active={editingRest}
+            onPress={() => { setRestInput(String(restSeconds)); setEditingRest(!editingRest); }}
+          />
+          {!stickyNote && !editingNote && (
+            <EditAction label="Add note" onPress={() => { setNoteInput(''); setEditingNote(true); }} />
           )}
-          {onMoveDown !== undefined && (
-            <Pressable onPress={onMoveDown} hitSlop={6}>
-              <Ionicons name="chevron-down" size={18} color={Colors.text} />
-            </Pressable>
-          )}
-          <Pressable
-            onPress={() => setShowSwapPicker(true)}
-            style={styles.removeBtn}
-            hitSlop={6}
-          >
-            <Ionicons name="swap-horizontal" size={20} color={Colors.textSecondary} />
-          </Pressable>
-          <Pressable
+          <EditAction
+            label="Remove"
+            danger
             onPress={() => {
               Alert.alert(
                 'Remove Exercise?',
@@ -143,57 +131,40 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
                 ]
               );
             }}
-            style={styles.removeBtn}
-          >
-            <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-          </Pressable>
-          <Ionicons
-            name={collapsed ? 'chevron-down' : 'chevron-up'}
-            size={20}
-            color={Colors.textTertiary}
           />
         </View>
-      </Pressable>
+      )}
 
       {/* Per-exercise rest timer */}
-      {!collapsed && (
+      {editing && editingRest && (
         <View style={styles.restRow}>
-          <Pressable
-            onPress={() => { setRestInput(String(restSeconds)); setEditingRest(!editingRest); }}
-            style={styles.restBtn}
-          >
-            <Ionicons name="timer-outline" size={14} color={Colors.textSecondary} />
-            <Text style={styles.restText}>Rest: {restSeconds}s</Text>
-          </Pressable>
-          {editingRest && (
-            <View style={styles.restEdit}>
-              {[30, 60, 90, 120, 180].map(s => (
-                <Pressable
-                  key={s}
-                  onPress={() => { setRestSeconds(s); setEditingRest(false); saveExerciseRestTimer(exercise.id, s); }}
-                  style={[styles.restChip, restSeconds === s && styles.restChipActive]}
-                >
-                  <Text style={[styles.restChipText, restSeconds === s && styles.restChipTextActive]}>
-                    {s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`}
-                  </Text>
-                </Pressable>
-              ))}
-              <TextInput
-                style={styles.restInput}
-                value={restInput}
-                onChangeText={t => setRestInput(t.replace(/[^0-9]/g, ''))}
-                onBlur={() => {
-                  const val = parseInt(restInput) || 90;
-                  setRestSeconds(val);
-                  setRestInput(String(val));
-                  saveExerciseRestTimer(exercise.id, val);
-                }}
-                keyboardType="numeric"
-                placeholder="sec"
-                placeholderTextColor={Colors.textTertiary}
-              />
-            </View>
-          )}
+          <View style={styles.restEdit}>
+            {[30, 60, 90, 120, 180].map(s => (
+              <Pressable
+                key={s}
+                onPress={() => { setRestSeconds(s); setEditingRest(false); saveExerciseRestTimer(exercise.id, s); }}
+                style={[styles.restChip, restSeconds === s && styles.restChipActive]}
+              >
+                <Text style={[styles.restChipText, restSeconds === s && styles.restChipTextActive]}>
+                  {s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`}
+                </Text>
+              </Pressable>
+            ))}
+            <TextInput
+              style={styles.restInput}
+              value={restInput}
+              onChangeText={t => setRestInput(t.replace(/[^0-9]/g, ''))}
+              onBlur={() => {
+                const val = parseInt(restInput) || 90;
+                setRestSeconds(val);
+                setRestInput(String(val));
+                saveExerciseRestTimer(exercise.id, val);
+              }}
+              keyboardType="numeric"
+              placeholder="sec"
+              placeholderTextColor={Colors.textTertiary}
+            />
+          </View>
         </View>
       )}
 
@@ -208,7 +179,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
         </Pressable>
       )}
 
-      {!collapsed && editingNote && (
+      {editingNote && (
         <View style={styles.stickyNoteEdit}>
           <TextInput
             style={styles.stickyNoteInput}
@@ -230,23 +201,8 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
         </View>
       )}
 
-      {!collapsed && !stickyNote && !editingNote && (
-        <Pressable
-          onPress={() => { setNoteInput(''); setEditingNote(true); }}
-          style={styles.addNoteBtn}
-        >
-          <Ionicons name="add" size={14} color={Colors.textTertiary} />
-          <Text style={styles.addNoteText}>Add note</Text>
-        </Pressable>
-      )}
-
       {!collapsed && (
         <>
-          <Text style={styles.ghostHint}>
-            {previousData.length > 0 ? 'Faded numbers are last time; tick a set to use them. ' : ''}
-            Tap a set number for warm-up, hold it to delete.
-          </Text>
-
           {/* Column headers */}
           <View style={styles.columnHeaders}>
             <Text style={[styles.colHeader, { width: 34 }]} numberOfLines={1}>SET</Text>
@@ -264,24 +220,22 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
               ref={setRowRefs.current[idx]}
               set={set}
               onUpdate={data => updateSet(workoutExercise.id, set.id, data)}
-              onComplete={fromPad => {
+              onComplete={() => {
                 completeSet(workoutExercise.id, set.id);
-                if (!set.completed && !fromPad) {
-                  // Ticked by hand: put any keyboard away and leave it away.
-                  Keyboard.dismiss();
-                } else if (!set.completed) {
-                  // Finished with the pad's Done: carry on to the next set.
-                  if (onSetCompleted) {
-                    // Let parent handle focus (supports superset navigation)
-                    onSetCompleted(workoutExercise.id, idx);
+                Keyboard.dismiss();
+                // Unticking a set stays put and leaves the rest timer alone.
+                if (set.completed) return;
+                // Ticked, by hand or with the pad's Done: carry on to the next set.
+                if (onSetCompleted) {
+                  // Let parent handle focus (supports superset navigation)
+                  onSetCompleted(workoutExercise.id, idx);
+                } else {
+                  // Fallback: focus next set within this card
+                  const nextIdx = workoutExercise.sets.findIndex((s, i) => i > idx && !s.completed);
+                  if (nextIdx >= 0) {
+                    setTimeout(() => setRowRefs.current[nextIdx]?.current?.focusWeight(), 100);
                   } else {
-                    // Fallback: focus next set within this card
-                    const nextIdx = workoutExercise.sets.findIndex((s, i) => i > idx && !s.completed);
-                    if (nextIdx >= 0) {
-                      setTimeout(() => setRowRefs.current[nextIdx]?.current?.focusWeight(), 100);
-                    } else {
-                      pad?.close();
-                    }
+                    pad?.close();
                   }
                 }
                 // In a superset, only start rest timer on the last exercise in the group
@@ -328,6 +282,15 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
   );
 });
 
+/** One word button in the Edit row. */
+function EditAction({ label, onPress, danger, active }: { label: string; onPress: () => void; danger?: boolean; active?: boolean }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={4} style={[styles.editAction, active && styles.editActionActive]}>
+      <Text style={[styles.editActionText, danger && styles.editActionDanger]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.bgCard,
@@ -346,15 +309,42 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.xs,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
+  editBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
-  nameRow: {
+  editText: {
+    color: Colors.text,
+    fontSize: FontSize.sm,
+    fontWeight: '700',
+  },
+  editRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  editAction: {
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  editActionActive: {
+    borderColor: Colors.text,
+  },
+  editActionText: {
+    color: Colors.text,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
+  editActionDanger: {
+    color: Colors.danger,
   },
   exerciseName: {
     color: Colors.text,
@@ -366,29 +356,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     fontWeight: '700',
   },
-  badges: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
   meta: {
     color: Colors.textSecondary,
     fontSize: FontSize.xs,
     fontWeight: '600',
-  },
-  volume: {
-    color: Colors.accent,
-    fontSize: FontSize.xs,
-    fontWeight: '700',
-  },
-  removeBtn: {
-    padding: 2,
-  },
-  ghostHint: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.xs,
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.xs,
   },
   columnHeaders: {
     flexDirection: 'row',
@@ -459,34 +430,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: '700',
   },
-  addNoteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    marginHorizontal: Spacing.md,
-    marginBottom: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  addNoteText: {
-    color: Colors.textTertiary,
-    fontSize: FontSize.xs,
-    fontWeight: '600',
-  },
   restRow: {
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.xs,
     gap: Spacing.xs,
-  },
-  restBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.xs,
-  },
-  restText: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.xs,
-    fontWeight: '600',
   },
   restEdit: {
     flexDirection: 'row',

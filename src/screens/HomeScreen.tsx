@@ -233,37 +233,17 @@ export function HomeScreen({ navigation }: any) {
           })}
           onPickDay={d => setPicking(d)}
         />
-        {stats && stats.totalWorkouts > 0 && (
-          <>
-            <View style={styles.statsGrid}>
-              <StatCard
-                label="Workouts"
-                value={String(stats.thisWeekWorkouts)}
-                icon="barbell-outline"
-                color={Colors.primary}
-              />
-              <StatCard
-                label="Sets"
-                value={String(stats.totalSets)}
-                icon="layers-outline"
-                color={Colors.warning}
-              />
-              <StatCard
-                label="Volume"
-                value={formatNumber(stats.totalVolume)}
-                icon="trending-up"
-                color={Colors.accent}
-                subtitle={unit}
-              />
-              <StatCard
-                label="PRs"
-                value={String(stats.prsThisMonth)}
-                icon="trophy"
-                color={Colors.primary}
-                onPress={() => setShowWeekPRsModal(true)}
-              />
-            </View>
-          </>
+        {stats && (
+          <View style={styles.weekLine}>
+            <Text style={styles.weekText}>
+              This week: {stats.thisWeekWorkouts} of {profile?.weeklyGoal ?? 3} sessions
+            </Text>
+            <Pressable onPress={() => setShowWeekPRsModal(true)} hitSlop={8}>
+              <Text style={styles.weekPRs}>
+                {weekPRs.length} PR{weekPRs.length === 1 ? '' : 's'}
+              </Text>
+            </Pressable>
+          </View>
         )}
 
         {/* Recent Workouts */}
@@ -449,34 +429,6 @@ export function HomeScreen({ navigation }: any) {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-  color,
-  subtitle,
-  onPress,
-}: {
-  label: string;
-  value: string;
-  icon: string;
-  color: string;
-  subtitle?: string;
-  onPress?: () => void;
-}) {
-  const Wrapper: any = onPress ? Pressable : View;
-  return (
-    <Wrapper onPress={onPress} style={[statStyles.card, { borderColor: color + '33' }]}>
-      <Ionicons name={icon as any} size={20} color={color} />
-      <Text style={[statStyles.value, { color }]}>{value}</Text>
-      <Text style={statStyles.label}>
-        {label}
-        {subtitle ? ` (${subtitle})` : ''}
-      </Text>
-    </Wrapper>
-  );
-}
-
 function WorkoutCard({
   workout,
   unit,
@@ -612,9 +564,21 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: '600',
   },
-  statsGrid: {
+  weekLine: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  weekText: {
+    color: Colors.text,
+    fontSize: FontSize.md,
+    fontWeight: '700',
+  },
+  weekPRs: {
+    color: Colors.text,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   emptyCard: {
     alignItems: 'center',
@@ -630,27 +594,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: FontSize.sm,
     textAlign: 'center',
-  },
-});
-
-const statStyles = StyleSheet.create({
-  card: {
-    flex: 1,
-    backgroundColor: Colors.bgCard,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    alignItems: 'center',
-    gap: Spacing.xs,
-    borderWidth: 1,
-  },
-  value: {
-    fontSize: FontSize.xl,
-    fontWeight: '800',
-  },
-  label: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.xs,
-    fontWeight: '600',
   },
 });
 

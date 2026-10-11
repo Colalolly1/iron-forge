@@ -14,7 +14,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
 import { EXERCISE_MAP } from '../data/exercises';
-import { BODY_PARTS, BODY_PART_LABELS, muscleOfPart } from '../utils/bodyParts';
+import { BODY_PARTS, BODY_PART_LABELS, muscleOfPart, slotSets } from '../utils/bodyParts';
 import { saveTemplate, getExerciseRestTimer, saveExerciseRestTimer } from '../utils/storage';
 import { generateId } from '../utils/helpers';
 import { WorkoutTemplate, Exercise, MuscleGroup, BodyPartTarget } from '../types';
@@ -23,11 +23,6 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 const TEMPLATE_COLORS = [
   '#FF6B6B', '#4ECDC4', '#F97316', '#A78BFA',
   '#06B6D4', '#8B5CF6', '#4F8EF7', '#00E676',
-];
-
-const TEMPLATE_ICONS = [
-  '💪', '🏋️', '🔥', '⚡', '🎯', '💥',
-  '🏆', '🦾', '🫀', '🧘', '🚀', '⭐',
 ];
 
 interface TemplateExercise {
@@ -48,7 +43,6 @@ export function EditTemplateScreen({ navigation, route }: any) {
   const [name, setName] = useState(existingTemplate?.name ?? '');
   const [description, setDescription] = useState(existingTemplate?.description ?? '');
   const [color, setColor] = useState(existingTemplate?.color ?? TEMPLATE_COLORS[0]);
-  const [icon, setIcon] = useState(existingTemplate?.icon ?? TEMPLATE_ICONS[0]);
   const [exercises, setExercises] = useState<TemplateExercise[]>(() => {
     if (!existingTemplate) return [];
     return existingTemplate.exercises.map(e => {
@@ -175,10 +169,15 @@ export function EditTemplateScreen({ navigation, route }: any) {
       })),
       muscleGroups,
       kind,
-      targets: kind === 'targets' ? targets.map(t => ({ ...t, reps: t.reps?.trim() || undefined })) : undefined,
+      targets: kind === 'targets' ? targets.map(t => {
+        // Keep sets as the first exercise's, for older copies of the app; setsPer only when they differ.
+        const per = slotSets(t);
+        const same = per.every(s => s === per[0]);
+        return { part: t.part, exercises: t.exercises, sets: per[0], ...(same ? {} : { setsPer: per }), reps: t.reps?.trim() || undefined };
+      }) : undefined,
       estimatedDuration: kind === 'targets' ? targets.reduce((n, t) => n + t.exercises, 0) * 8 : exercises.length * 8,
       color,
-      icon,
+      icon: existingTemplate?.icon,
       lastUsed: existingTemplate?.lastUsed,
       timesUsed: existingTemplate?.timesUsed ?? 0,
       createdAt: existingTemplate?.createdAt ?? new Date().toISOString(),
@@ -375,8 +374,15 @@ export function EditTemplateScreen({ navigation, route }: any) {
                   </Pressable>
                 </View>
                 <View style={styles.bpRow}>
-                  <Stepper label="Exercises" value={t.exercises} onChange={v => updateTarget(i, { exercises: v })} />
-                  <Stepper label="Sets each" value={t.sets} onChange={v => updateTarget(i, { sets: v })} />
+                  <Stepper
+                    label="Exercises"
+                    value={t.exercises}
+                    onChange={v => {
+                      // New exercises start with the last one's sets.
+                      const per = slotSets(t);
+                      updateTarget(i, { exercises: v, setsPer: Array.from({ length: v }, (_, k) => per[k] ?? per[per.length - 1] ?? 3) });
+                    }}
+                  />
                   <View style={styles.stepper}>
                     <Text style={styles.stepperLabel}>Reps</Text>
                     <TextInput
@@ -388,6 +394,16 @@ export function EditTemplateScreen({ navigation, route }: any) {
                       keyboardType="numbers-and-punctuation"
                     />
                   </View>
+                </View>
+                <View style={styles.bpSets}>
+                  {slotSets(t).map((s, k) => (
+                    <Stepper
+                      key={k}
+                      label={t.exercises === 1 ? 'Sets' : `Exercise ${k + 1} sets`}
+                      value={s}
+                      onChange={v => updateTarget(i, { setsPer: slotSets(t).map((x, j) => (j === k ? v : x)) })}
+                    />
+                  ))}
                 </View>
               </View>
             ))}
@@ -451,6 +467,7 @@ const styles = StyleSheet.create({
   bpBlock: { paddingVertical: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border, gap: Spacing.sm },
   bpHead: { flexDirection: 'row', alignItems: 'center' },
   bpRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  bpSets: { flexDirection: 'row', flexWrap: 'wrap', columnGap: Spacing.lg, rowGap: Spacing.sm },
   bpName: { flex: 1, color: Colors.text, fontSize: FontSize.md, fontWeight: '700' },
   repsInput: {
     width: 72,

@@ -17,6 +17,7 @@ import {
   getProfile,
 } from '../utils/storage';
 import { generateId, calculateVolume } from '../utils/helpers';
+import { targetForExercise, setsForSlot } from '../utils/bodyParts';
 
 // Preload bell sound
 const bellSound = require('../../assets/bell.wav');
@@ -269,10 +270,13 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
 
   const addExercise = useCallback(
     (exercise: Exercise, sets = 1) => {
-      updateWorkout(w => ({
-        ...w,
-        exercises: [...w.exercises, newWorkoutExercise(exercise, sets, w.exercises.length)],
-      }));
+      updateWorkout(w => {
+        // On a targets workout, an exercise for one of the body parts counts
+        // toward that target and gets its number of sets.
+        const target = targetForExercise(w, exercise);
+        const we = newWorkoutExercise(exercise, target ? setsForSlot(target, chosenFor(w, target.id)) : sets, w.exercises.length);
+        return { ...w, exercises: [...w.exercises, target ? { ...we, targetId: target.id } : we] };
+      });
     },
     [updateWorkout]
   );
@@ -286,7 +290,7 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
           ...w,
           exercises: [
             ...w.exercises,
-            { ...newWorkoutExercise(exercise, target.sets, w.exercises.length), targetId },
+            { ...newWorkoutExercise(exercise, setsForSlot(target, chosenFor(w, targetId)), w.exercises.length), targetId },
           ],
         };
       });
@@ -554,6 +558,11 @@ export function useWorkout() {
   const ctx = useContext(WorkoutContext);
   if (!ctx) throw new Error('useWorkout must be used within WorkoutProvider');
   return ctx;
+}
+
+/** How many exercises have been chosen for a target so far. */
+function chosenFor(w: Workout, targetId: string): number {
+  return w.exercises.filter(e => e.targetId === targetId).length;
 }
 
 function newWorkoutExercise(exercise: Exercise, sets: number, order: number): WorkoutExercise {
