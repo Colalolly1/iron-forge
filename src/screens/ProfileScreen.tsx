@@ -250,47 +250,6 @@ export function ProfileScreen({ navigation }: any) {
               thumbColor={Colors.text}
             />
           </View>
-
-          <View style={styles.toggleRow}>
-            <View>
-              <Text style={styles.label}>Previous Data Source</Text>
-              <Text style={styles.sublabel}>Show past weight/reps in inputs</Text>
-            </View>
-            <View style={styles.segmented}>
-              <Pressable
-                onPress={() => updateProfile({ previousDataSource: 'last_workout' })}
-                style={[
-                  styles.segBtn,
-                  profile.previousDataSource === 'last_workout' && styles.segBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segText,
-                    profile.previousDataSource === 'last_workout' && styles.segTextActive,
-                  ]}
-                >
-                  Last Workout
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => updateProfile({ previousDataSource: 'template' })}
-                style={[
-                  styles.segBtn,
-                  profile.previousDataSource === 'template' && styles.segBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segText,
-                    profile.previousDataSource === 'template' && styles.segTextActive,
-                  ]}
-                >
-                  Template
-                </Text>
-              </Pressable>
-            </View>
-          </View>
         </Card>
 
         {/* Body Measurements */}
@@ -559,8 +518,12 @@ export function ProfileScreen({ navigation }: any) {
 
           <Pressable
             onPress={async () => {
-              const count = await rebuildAllPRs();
-              Alert.alert('PRs Rebuilt', `Found ${count} personal records across all workouts (including imported data).`);
+              try {
+                const count = await rebuildAllPRs();
+                Alert.alert('PRs Rebuilt', `Found ${count} personal records across all workouts (including imported data).`);
+              } catch (e: any) {
+                Alert.alert('Rebuild Failed', e.message || 'Could not rebuild PRs.');
+              }
             }}
             style={styles.toolRow}
           >

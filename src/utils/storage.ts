@@ -23,10 +23,23 @@ const KEYS = {
 
 // ─── Generic helpers ────────────────────────────────────────
 
+// A value that is stored but can't be read throws instead of looking empty,
+// so a read-modify-write never saves over data it couldn't read.
 async function getJSON<T>(key: string): Promise<T | null> {
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return null;
   try {
-    const raw = await AsyncStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
+    return JSON.parse(raw) as T;
+  } catch {
+    const name = key.replace('@ironforge/', '').replace(/_/g, ' ');
+    throw new Error(`Couldn't read your saved ${name}. Nothing was changed.`);
+  }
+}
+
+// For values where falling back to a default is safe (profile, PRs, the active workout).
+async function getJSONOrNull<T>(key: string): Promise<T | null> {
+  try {
+    return await getJSON<T>(key);
   } catch {
     return null;
   }
@@ -53,7 +66,11 @@ export async function setPlanOverride(dateKey: string, value: string | null): Pr
 }
 
 export async function getWorkouts(): Promise<Workout[]> {
-  return (await getJSON<Workout[]>(KEYS.WORKOUTS)) ?? [];
+  const workouts = await getJSON<Workout[]>(KEYS.WORKOUTS);
+  if (workouts !== null && !Array.isArray(workouts)) {
+    throw new Error("Couldn't read your saved workouts. Nothing was changed.");
+  }
+  return workouts ?? [];
 }
 
 export async function saveWorkout(workout: Workout): Promise<void> {
@@ -77,7 +94,7 @@ export async function deleteWorkout(id: string): Promise<void> {
 // ─── Active Workout ──────────────────────────────────────────
 
 export async function getActiveWorkout(): Promise<Workout | null> {
-  return getJSON<Workout>(KEYS.ACTIVE_WORKOUT);
+  return getJSONOrNull<Workout>(KEYS.ACTIVE_WORKOUT);
 }
 
 export async function saveActiveWorkout(workout: Workout | null): Promise<void> {
@@ -113,7 +130,7 @@ export async function deleteTemplate(id: string): Promise<void> {
 // ─── Personal Records ────────────────────────────────────────
 
 export async function getPRs(): Promise<PersonalRecord[]> {
-  const all = (await getJSON<PersonalRecord[]>(KEYS.PRS)) ?? [];
+  const all = (await getJSONOrNull<PersonalRecord[]>(KEYS.PRS)) ?? [];
   // Migrate: only keep E1RM PRs (legacy weight/volume PRs from old system are dropped)
   const filtered = all.filter(p => p.type === 'one_rep_max');
   if (filtered.length !== all.length) {
@@ -247,7 +264,7 @@ export const DEFAULT_PROFILE: UserProfile = {
 };
 
 export async function getProfile(): Promise<UserProfile> {
-  return (await getJSON<UserProfile>(KEYS.PROFILE)) ?? DEFAULT_PROFILE;
+  return (await getJSONOrNull<UserProfile>(KEYS.PROFILE)) ?? DEFAULT_PROFILE;
 }
 
 export async function saveProfile(profile: UserProfile): Promise<void> {

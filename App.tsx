@@ -47,6 +47,7 @@ function TabNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        animation: 'none',
         tabBarStyle: {
           backgroundColor: Colors.bgCard,
           borderTopColor: Colors.border,
@@ -113,13 +114,13 @@ export default function App() {
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: Colors.bg },
-              animation: 'slide_from_bottom',
+              animation: 'none',
             }}
           >
             <Stack.Screen name="Tabs" component={TabNavigator} />
-            <Stack.Screen name="Templates" component={TemplatesScreen} options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="Plan" component={PlanScreen} options={{ animation: 'slide_from_right' }} />
-            <Stack.Screen name="Exercises" component={ExercisesScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Templates" component={TemplatesScreen} />
+            <Stack.Screen name="Plan" component={PlanScreen} />
+            <Stack.Screen name="Exercises" component={ExercisesScreen} />
             <Stack.Screen
               name="ActiveWorkout"
               component={ActiveWorkoutScreen}

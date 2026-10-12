@@ -20,14 +20,16 @@ export function exportWorkoutsCSV(workouts: Workout[], unit: string): string {
     const mins = Math.max(0, Math.round(w.duration ?? 0));
     const duration = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
     w.exercises.forEach(e => {
-      e.sets.forEach(s => {
+      // Only sets that were done; warm-ups are "W", as in Strong. Weights go out as logged,
+      // so assisted lifts keep their minus sign.
+      e.sets.filter(s => s.completed).forEach(s => {
         rows.push([
           date,
           escapeCsv(w.name),
           duration,
           escapeCsv(e.exercise.name),
-          String(s.setNumber),
-          s.weight > 0 ? String(s.weight) : '0',
+          s.isWarmup ? 'W' : String(s.setNumber),
+          String(s.weight || 0),
           s.reps > 0 ? String(s.reps) : '0',
           s.distance ? String(s.distance) : '0',
           s.seconds ? String(s.seconds) : '0',

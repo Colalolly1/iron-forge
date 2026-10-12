@@ -1,12 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useWorkout } from '../context/WorkoutContext';
+import { useWorkout, useRestSeconds } from '../context/WorkoutContext';
 import { formatTimer } from '../utils/helpers';
 import { Colors, BorderRadius, Spacing, FontSize } from '../theme/colors';
 
 export function RestTimerBar() {
-  const { restTimer, isRestTimerRunning, stopRestTimer, startRestTimer } = useWorkout();
+  const { isRestTimerRunning, stopRestTimer, startRestTimer, extendRestTimer } = useWorkout();
+  const restTimer = useRestSeconds();
 
   if (!isRestTimerRunning && restTimer === 0) return null;
 
@@ -21,25 +22,28 @@ export function RestTimerBar() {
 
         <View style={styles.actions}>
           <Pressable
-            onPress={() => startRestTimer(30)}
+            onPress={() => extendRestTimer(30)}
+            hitSlop={{ top: 4, bottom: 4 }}
             style={styles.quickBtn}
           >
             <Text style={styles.quickText}>+30s</Text>
           </Pressable>
           <Pressable
             onPress={() => startRestTimer(60)}
+            hitSlop={{ top: 4, bottom: 4 }}
             style={styles.quickBtn}
           >
             <Text style={styles.quickText}>1:00</Text>
           </Pressable>
           <Pressable
             onPress={() => startRestTimer(90)}
+            hitSlop={{ top: 4, bottom: 4 }}
             style={styles.quickBtn}
           >
             <Text style={styles.quickText}>1:30</Text>
           </Pressable>
 
-          <Pressable onPress={stopRestTimer} style={styles.stopBtn}>
+          <Pressable onPress={stopRestTimer} hitSlop={{ top: 4, bottom: 4, right: 6 }} style={styles.stopBtn}>
             <Ionicons name="close" size={18} color={Colors.danger} />
           </Pressable>
         </View>
@@ -81,8 +85,7 @@ const styles = StyleSheet.create({
   },
   quickBtn: {
     backgroundColor: Colors.primaryMuted,
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: Spacing.xs,
+    padding: 10,
     borderRadius: BorderRadius.sm,
   },
   quickText: {
@@ -91,6 +94,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   stopBtn: {
-    padding: Spacing.xs,
+    padding: 10,
   },
 });

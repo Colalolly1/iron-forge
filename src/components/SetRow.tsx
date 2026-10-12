@@ -142,15 +142,15 @@ export const SetRow = forwardRef<SetRowRef, SetRowProps>(function SetRow(props, 
         <Ionicons
           name={set.completed ? 'checkmark-circle' : 'checkmark-circle-outline'}
           size={34}
-          color={set.completed ? Colors.accent : Colors.textTertiary}
+          color={set.completed ? Colors.accent : Colors.textSecondary}
         />
       </Pressable>
     </View>
   );
 });
 
-/** Last time's numbers: dim, thin and italic, so they never read as typed. */
-const GHOST = '#5A5A5A';
+/** Last time's numbers: dimmer and italic in a dashed box, so they never read as typed. Darker greys break up on e-ink. */
+const GHOST = '#888888';
 
 const styles = StyleSheet.create({
   row: {
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   ghostText: {
     color: GHOST,
     fontSize: FontSize.md,
-    fontWeight: '400',
+    fontWeight: '600',
     fontStyle: 'italic',
     textAlign: 'center',
   },

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { AppState, AppStateStatus, Vibration, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
@@ -22,41 +22,48 @@ import { targetForExercise, setsForSlot } from '../utils/bodyParts';
 // Preload bell sound
 const bellSound = require('../../assets/bell.wav');
 
-// Configure notification handler (show alerts even in foreground)
+// One rest notification at a time, so it can be replaced or cancelled by name.
+const REST_NOTIFICATION_ID = 'rest-timer';
+// Android keeps a channel's first settings, so a change of sound or vibration needs a new id.
+const REST_CHANNEL_ID = 'rest-timer-v4';
+
 if (Platform.OS !== 'web') {
+  // With the app open the in-app bell covers it; the notification is for when it isn't.
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async () => {
+      const open = AppState.currentState === 'active';
+      return {
+        shouldPlaySound: !open,
+        shouldSetBadge: false,
+        shouldShowBanner: !open,
+        shouldShowList: !open,
+      };
+    },
   });
 
-  // Create Android notification channel with bell sound + vibration
-  // Using unique channel ID so Android doesn't cache old silent settings
   if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('rest-timer-v3', {
+    Notifications.setNotificationChannelAsync(REST_CHANNEL_ID, {
       name: 'Rest Timer',
       importance: Notifications.AndroidImportance.MAX,
       sound: 'bell.wav',
       vibrationPattern: [0, 300],
-      enableVibrate: false,
+      enableVibrate: true,
       lightColor: '#FFFFFF',
     });
+    // The old channel had vibration off; remove it so it doesn't linger in settings.
+    Notifications.deleteNotificationChannelAsync('rest-timer-v3').catch(() => {});
   }
 }
 
 interface WorkoutContextType {
   activeWorkout: Workout | null;
   isWorkoutActive: boolean;
-  restTimer: number;
   isRestTimerRunning: boolean;
   newPRs: PersonalRecord[];
 
   startWorkout: (name?: string, templateExercises?: WorkoutExercise[], targets?: Workout['targets']) => void;
-  finishWorkout: () => Promise<PersonalRecord[]>;
+  /** Saves the workout, under `name` if one is given. */
+  finishWorkout: (name?: string) => Promise<PersonalRecord[]>;
   discardWorkout: () => void;
 
   addExercise: (exercise: Exercise, sets?: number) => void;
@@ -75,11 +82,14 @@ interface WorkoutContextType {
   getExercisesInSuperset: (supersetGroupId: string) => WorkoutExercise[];
 
   startRestTimer: (seconds?: number) => void;
+  /** Adds time to the running rest timer. */
+  extendRestTimer: (seconds: number) => void;
   stopRestTimer: () => void;
   clearPRs: () => void;
 }
 
 const WorkoutContext = createContext<WorkoutContextType | null>(null);
+const RestSecondsContext = createContext(0);
 
 export function WorkoutProvider({ children }: { children: React.ReactNode }) {
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
@@ -98,7 +108,6 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
       soundEnabledRef.current = p.sound;
     });
   }, []);
-  const notifIdRef = useRef<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
 
   // Reload user preferences (called before each timer finish to respect toggle changes)
@@ -142,15 +151,22 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Restore active workout on mount
+  // Restore active workout on mount. Until that has finished, nothing is saved,
+  // or the empty starting state would be written over the stored workout.
+  const hydrated = useRef(false);
   useEffect(() => {
-    getActiveWorkout().then(w => {
-      if (w) setActiveWorkout(w);
-    });
+    getActiveWorkout()
+      .then(w => {
+        if (w) setActiveWorkout(prev => prev ?? w);
+      })
+      .finally(() => {
+        hydrated.current = true;
+      });
   }, []);
 
   // Persist active workout on change
   useEffect(() => {
+    if (!hydrated.current) return;
     saveActiveWorkout(activeWorkout);
   }, [activeWorkout]);
 
@@ -227,7 +243,7 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const finishWorkout = useCallback(async (): Promise<PersonalRecord[]> => {
+  const finishWorkout = useCallback(async (name?: string): Promise<PersonalRecord[]> => {
     if (!activeWorkout) return [];
 
     const endTime = new Date().toISOString();
@@ -245,12 +261,14 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
 
     const finishedWorkout: Workout = {
       ...activeWorkout,
+      name: name?.trim() || activeWorkout.name,
       endTime,
       duration,
       totalVolume: totalVol,
       totalSets,
     };
 
+    // Throws if the saved history can't be read; the workout then stays open.
     await saveWorkout(finishedWorkout);
     const prs = await checkAndSavePRs(finishedWorkout);
     setNewPRs(prs);
@@ -258,6 +276,7 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
     setIsRestTimerRunning(false);
     setRestTimer(0);
     timerEndRef.current = 0;
+    cancelRestNotification();
     return prs;
   }, [activeWorkout]);
 
@@ -266,6 +285,7 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
     setIsRestTimerRunning(false);
     setRestTimer(0);
     timerEndRef.current = 0;
+    cancelRestNotification();
   }, []);
 
   const addExercise = useCallback(
@@ -463,16 +483,17 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
     [updateWorkout]
   );
 
-  const scheduleNotification = useCallback(async (seconds: number) => {
+  // Schedules the bell for the timer's current end time. The fixed id replaces any rest notification already waiting.
+  const scheduleNotification = useCallback(async () => {
     if (Platform.OS === 'web') return;
     try {
-      // Cancel previous
-      if (notifIdRef.current) {
-        await Notifications.cancelScheduledNotificationAsync(notifIdRef.current).catch(() => {});
-      }
       // Reload prefs to respect current toggle state
       await reloadPrefs();
-      notifIdRef.current = await Notifications.scheduleNotificationAsync({
+      // The timer may have been stopped while the prefs loaded.
+      const seconds = Math.ceil((timerEndRef.current - Date.now()) / 1000);
+      if (timerEndRef.current === 0 || seconds <= 0) return;
+      await Notifications.scheduleNotificationAsync({
+        identifier: REST_NOTIFICATION_ID,
         content: {
           title: 'Rest Timer Done',
           body: 'Time to start your next set!',
@@ -482,76 +503,112 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
           seconds,
-          channelId: 'rest-timer-v3',
+          channelId: REST_CHANNEL_ID,
         },
       });
     } catch {}
   }, [reloadPrefs]);
-
-  const cancelNotification = useCallback(async () => {
-    if (Platform.OS === 'web' || !notifIdRef.current) return;
-    try {
-      await Notifications.cancelScheduledNotificationAsync(notifIdRef.current);
-    } catch {}
-    notifIdRef.current = null;
-  }, []);
 
   const startRestTimer = useCallback((seconds?: number) => {
     if (seconds) {
       timerEndRef.current = Date.now() + seconds * 1000;
       setRestTimer(seconds);
       setIsRestTimerRunning(true);
-      scheduleNotification(seconds);
+      scheduleNotification();
     } else {
       getProfile().then(profile => {
         const dur = profile.restTimerDefault;
         timerEndRef.current = Date.now() + dur * 1000;
         setRestTimer(dur);
         setIsRestTimerRunning(true);
-        scheduleNotification(dur);
+        scheduleNotification();
       });
     }
+  }, [scheduleNotification]);
+
+  const extendRestTimer = useCallback((seconds: number) => {
+    // From the current end time, or from now if the timer has already run out.
+    timerEndRef.current = Math.max(timerEndRef.current, Date.now()) + seconds * 1000;
+    setRestTimer(Math.round((timerEndRef.current - Date.now()) / 1000));
+    setIsRestTimerRunning(true);
+    scheduleNotification();
   }, [scheduleNotification]);
 
   const stopRestTimer = useCallback(() => {
     setIsRestTimerRunning(false);
     setRestTimer(0);
     timerEndRef.current = 0;
-    cancelNotification();
-  }, [cancelNotification]);
+    cancelRestNotification();
+  }, []);
 
   const clearPRs = useCallback(() => setNewPRs([]), []);
 
+  const value = useMemo<WorkoutContextType>(
+    () => ({
+      activeWorkout,
+      isWorkoutActive: !!activeWorkout,
+      isRestTimerRunning,
+      newPRs,
+      startWorkout,
+      finishWorkout,
+      discardWorkout,
+      addExercise,
+      pickForTarget,
+      removeExercise,
+      replaceExercise,
+      reorderExercise,
+      toggleSuperset,
+      getExercisesInSuperset,
+      addSet,
+      updateSet,
+      removeSet,
+      completeSet,
+      startRestTimer,
+      extendRestTimer,
+      stopRestTimer,
+      clearPRs,
+    }),
+    [
+      activeWorkout,
+      isRestTimerRunning,
+      newPRs,
+      startWorkout,
+      finishWorkout,
+      discardWorkout,
+      addExercise,
+      pickForTarget,
+      removeExercise,
+      replaceExercise,
+      reorderExercise,
+      toggleSuperset,
+      getExercisesInSuperset,
+      addSet,
+      updateSet,
+      removeSet,
+      completeSet,
+      startRestTimer,
+      extendRestTimer,
+      stopRestTimer,
+      clearPRs,
+    ]
+  );
+
+  // The seconds left tick on their own context, so only the timer redraws each second.
   return (
-    <WorkoutContext.Provider
-      value={{
-        activeWorkout,
-        isWorkoutActive: !!activeWorkout,
-        restTimer,
-        isRestTimerRunning,
-        newPRs,
-        startWorkout,
-        finishWorkout,
-        discardWorkout,
-        addExercise,
-        pickForTarget,
-        removeExercise,
-        replaceExercise,
-        reorderExercise,
-        toggleSuperset,
-        getExercisesInSuperset,
-        addSet,
-        updateSet,
-        removeSet,
-        completeSet,
-        startRestTimer,
-        stopRestTimer,
-        clearPRs,
-      }}
-    >
-      {children}
+    <WorkoutContext.Provider value={value}>
+      <RestSecondsContext.Provider value={restTimer}>{children}</RestSecondsContext.Provider>
     </WorkoutContext.Provider>
   );
+}
+
+/** Seconds left on the rest timer. Only the timer itself should read this. */
+export function useRestSeconds() {
+  return useContext(RestSecondsContext);
+}
+
+function cancelRestNotification() {
+  if (Platform.OS === 'web') return;
+  Notifications.cancelScheduledNotificationAsync(REST_NOTIFICATION_ID).catch(() => {});
 }
 
 export function useWorkout() {

@@ -26,7 +26,8 @@
       "permissions": [
         "VIBRATE",
         "POST_NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM"
       ]
     },
     "web": {

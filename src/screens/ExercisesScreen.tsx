@@ -312,7 +312,7 @@ export function ExercisesScreen({ navigation }: any) {
       <Modal
         visible={renameModalVisible}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setRenameModalVisible(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setRenameModalVisible(false)}>
@@ -375,7 +375,7 @@ export function ExercisesScreen({ navigation }: any) {
       <Modal
         visible={createModalVisible}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setCreateModalVisible(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setCreateModalVisible(false)}>

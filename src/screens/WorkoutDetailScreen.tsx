@@ -15,7 +15,7 @@ import { Card } from '../components/Card';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
 import { useWorkout } from '../context/WorkoutContext';
 import { startOrReplace } from '../utils/startFlow';
-import { getWorkouts, deleteWorkout, getProfile, saveWorkout } from '../utils/storage';
+import { getWorkouts, deleteWorkout, getProfile, saveWorkout, rebuildAllPRs } from '../utils/storage';
 import {
   formatDuration,
   formatWeight,
@@ -74,7 +74,12 @@ export function WorkoutDetailScreen({ route, navigation }: any) {
   const handleDelete = async () => {
     if (Platform.OS === 'web') {
       if (window.confirm('Delete Workout? This cannot be undone.')) {
-        await deleteWorkout(workoutId);
+        try {
+          await deleteWorkout(workoutId);
+        } catch (e: any) {
+          window.alert(e?.message || 'The workout could not be deleted.');
+          return;
+        }
         navigation.goBack();
       }
     } else {
@@ -84,7 +89,12 @@ export function WorkoutDetailScreen({ route, navigation }: any) {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteWorkout(workoutId);
+            try {
+              await deleteWorkout(workoutId);
+            } catch (e: any) {
+              Alert.alert('Not deleted', e?.message || 'The workout could not be deleted.');
+              return;
+            }
             navigation.goBack();
           },
         },
@@ -114,7 +124,13 @@ export function WorkoutDetailScreen({ route, navigation }: any) {
       (sum, e) => sum + calculateVolume(e.sets), 0
     );
     const updated = { ...editWorkout, totalSets, totalVolume };
-    await saveWorkout(updated);
+    try {
+      await saveWorkout(updated);
+      await rebuildAllPRs();
+    } catch (e: any) {
+      Alert.alert('Not saved', e?.message || 'The changes could not be saved.');
+      return;
+    }
     setWorkout(updated);
     setEditing(false);
     setEditWorkout(null);

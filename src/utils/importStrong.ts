@@ -1,6 +1,6 @@
 import { Workout, WorkoutExercise, WorkoutSet, Exercise } from '../types';
 import { EXERCISE_MAP, getAllExercises } from '../data/exercises';
-import { generateId } from './helpers';
+import { generateId, calculateVolume } from './helpers';
 import { saveWorkout, saveCustomExercise, rebuildAllPRs } from './storage';
 
 /**
@@ -18,6 +18,7 @@ interface StrongRow {
   duration: string; // raw duration string e.g. "1h 23m" or seconds
   exerciseName: string;
   setOrder: number;
+  isWarmup: boolean;
   weight: number;
   reps: number;
   distance: number;
@@ -179,13 +180,17 @@ export function parseStrongCSV(csvContent: string): StrongRow[] {
     const rawDist = distIdx >= 0 ? fields[distIdx] : '';
     const rawSec = secIdx >= 0 ? fields[secIdx] : '';
     const rawRpe = rpeIdx >= 0 ? fields[rpeIdx] : '';
+    // Strong and Iron Forge both write "W" as the set order of a warm-up.
+    const rawSet = setIdx >= 0 ? (fields[setIdx] ?? '').trim() : '';
+    const isWarmup = rawSet.toUpperCase() === 'W';
 
     rows.push({
       date: fields[dateIdx] ?? '',
       workoutName: nameIdx >= 0 ? fields[nameIdx] ?? '' : 'Workout',
       duration: durationIdx >= 0 ? fields[durationIdx] ?? '' : '',
       exerciseName: fields[exIdx] ?? '',
-      setOrder: setIdx >= 0 ? parseInt(fields[setIdx]) || 1 : 1,
+      setOrder: isWarmup ? 0 : parseInt(rawSet) || 1,
+      isWarmup,
       weight: rawWeight ? parseFloat(rawWeight) : 0,
       reps: rawReps ? parseInt(rawReps) : 0,
       distance: rawDist ? parseFloat(rawDist) : 0,
@@ -250,6 +255,7 @@ export async function importStrongWorkouts(csvContent: string): Promise<{
         reps: r.reps,
         rpe: r.rpe,
         completed: true,
+        ...(r.isWarmup ? { isWarmup: true } : {}),
         distance: r.distance > 0 ? r.distance : undefined,
         seconds: r.seconds > 0 ? r.seconds : undefined,
         notes: r.notes || undefined,
@@ -275,14 +281,12 @@ export async function importStrongWorkouts(csvContent: string): Promise<{
     // Calculate end time from duration
     const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
 
-    // Calculate totals
-    const totalSets = exercises.reduce((sum, e) => sum + e.sets.filter(s => s.completed).length, 0);
-    const totalVolume = exercises.reduce(
-      (sum, e) => sum + e.sets.filter(s => s.completed).reduce((s2, set) => s2 + set.weight * set.reps, 0),
-      0,
-    );
+    // Calculate totals (warm-ups don't count, as in a workout logged here)
+    const working = (e: WorkoutExercise) => e.sets.filter(s => s.completed && !s.isWarmup);
+    const totalSets = exercises.reduce((sum, e) => sum + working(e).length, 0);
+    const totalVolume = exercises.reduce((sum, e) => sum + calculateVolume(e.sets), 0);
     const totalReps = exercises.reduce(
-      (sum, e) => sum + e.sets.filter(s => s.completed).reduce((s2, set) => s2 + set.reps, 0),
+      (sum, e) => sum + working(e).reduce((s2, set) => s2 + set.reps, 0),
       0,
     );
 

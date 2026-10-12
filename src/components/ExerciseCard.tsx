@@ -21,6 +21,10 @@ interface ExerciseCardProps {
   /** Set when this exercise was chosen for a body-part target, e.g. "For Chest · 3 sets · 8-12 reps". */
   targetLabel?: string;
   targetPart?: BodyPart;
+  /** Rest after a set when this exercise has no rest time of its own (the profile's default). */
+  restDefault: number;
+  /** False when the profile has Auto Rest Timer off. */
+  autoRest?: boolean;
 }
 
 export interface ExerciseCardRef {
@@ -28,7 +32,7 @@ export interface ExerciseCardRef {
 }
 
 export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>(function ExerciseCard(
-  { workoutExercise, showRPE, unit, isInSuperset, onMoveUp, onMoveDown, onSetCompleted, targetLabel, targetPart },
+  { workoutExercise, showRPE, unit, isInSuperset, onMoveUp, onMoveDown, onSetCompleted, targetLabel, targetPart, restDefault, autoRest = true },
   ref
 ) {
   const navigation = useNavigation<any>();
@@ -40,9 +44,11 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
   const [editingNote, setEditingNote] = useState(false);
   const [noteInput, setNoteInput] = useState('');
   const [previousData, setPreviousData] = useState<PreviousSetData[]>([]);
-  const [restSeconds, setRestSeconds] = useState(90);
+  // This exercise's own rest time, if one was saved; otherwise the profile's default.
+  const [savedRest, setSavedRest] = useState<number | null>(null);
+  const restSeconds = savedRest ?? restDefault;
   const [editingRest, setEditingRest] = useState(false);
-  const [restInput, setRestInput] = useState('90');
+  const [restInput, setRestInput] = useState('');
 
   const exercise = workoutExercise.exercise;
   const pad = usePad();
@@ -67,12 +73,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
       if (note) setStickyNote(note);
     });
     getPreviousExerciseData(exercise.id).then(setPreviousData);
-    getExerciseRestTimer(exercise.id).then(saved => {
-      if (saved !== null) {
-        setRestSeconds(saved);
-        setRestInput(String(saved));
-      }
-    });
+    getExerciseRestTimer(exercise.id).then(setSavedRest);
   }, [exercise.id]);
 
   const handleSaveNote = async () => {
@@ -81,6 +82,13 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
     setEditingNote(false);
   };
   const completedSets = workoutExercise.sets.filter(s => s.completed && !s.isWarmup);
+
+  // Last time's working sets line up with this time's working sets; warm-ups get none.
+  const previousFor: (PreviousSetData | undefined)[] = [];
+  let working = 0;
+  for (const set of workoutExercise.sets) {
+    previousFor.push(set.isWarmup ? undefined : previousData[working++]);
+  }
 
   return (
     <View style={styles.container}>
@@ -142,7 +150,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
             {[30, 60, 90, 120, 180].map(s => (
               <Pressable
                 key={s}
-                onPress={() => { setRestSeconds(s); setEditingRest(false); saveExerciseRestTimer(exercise.id, s); }}
+                onPress={() => { setSavedRest(s); setEditingRest(false); saveExerciseRestTimer(exercise.id, s); }}
                 style={[styles.restChip, restSeconds === s && styles.restChipActive]}
               >
                 <Text style={[styles.restChipText, restSeconds === s && styles.restChipTextActive]}>
@@ -155,8 +163,8 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
               value={restInput}
               onChangeText={t => setRestInput(t.replace(/[^0-9]/g, ''))}
               onBlur={() => {
-                const val = parseInt(restInput) || 90;
-                setRestSeconds(val);
+                const val = parseInt(restInput) || restSeconds;
+                setSavedRest(val);
                 setRestInput(String(val));
                 saveExerciseRestTimer(exercise.id, val);
               }}
@@ -238,6 +246,7 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
                     pad?.close();
                   }
                 }
+                if (!autoRest) return;
                 // In a superset, only start rest timer on the last exercise in the group
                 if (isInSuperset && workoutExercise.supersetGroupId) {
                   const groupExercises = getExercisesInSuperset(workoutExercise.supersetGroupId);
@@ -252,8 +261,8 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
               onRemove={() => removeSet(workoutExercise.id, set.id)}
               showRPE={showRPE}
               unit={unit}
-              previousWeight={previousData[idx]?.weight}
-              previousReps={previousData[idx]?.reps}
+              previousWeight={previousFor[idx]?.weight}
+              previousReps={previousFor[idx]?.reps}
               exerciseName={exercise.name}
             />
           ))}
@@ -269,15 +278,17 @@ export const ExerciseCard = React.forwardRef<ExerciseCardRef, ExerciseCardProps>
         </>
       )}
 
-      <ExercisePickerModal
-        visible={showSwapPicker}
-        onlyPart={targetPart}
-        onClose={() => setShowSwapPicker(false)}
-        onSelect={(newExercise: Exercise) => {
-          replaceExercise(workoutExercise.id, newExercise);
-          setShowSwapPicker(false);
-        }}
-      />
+      {showSwapPicker && (
+        <ExercisePickerModal
+          visible
+          onlyPart={targetPart}
+          onClose={() => setShowSwapPicker(false)}
+          onSelect={(newExercise: Exercise) => {
+            replaceExercise(workoutExercise.id, newExercise);
+            setShowSwapPicker(false);
+          }}
+        />
+      )}
     </View>
   );
 });
@@ -371,7 +382,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   colHeader: {
-    color: Colors.textTertiary,
+    color: Colors.textSecondary,
     fontSize: FontSize.xs,
     fontWeight: '700',
     textAlign: 'center',

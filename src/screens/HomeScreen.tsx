@@ -367,7 +367,7 @@ export function HomeScreen({ navigation }: any) {
       {/* This Week's PRs Modal */}
       <Modal
         visible={showWeekPRsModal}
-        animationType="slide"
+        animationType="none"
         transparent
         onRequestClose={() => setShowWeekPRsModal(false)}
       >

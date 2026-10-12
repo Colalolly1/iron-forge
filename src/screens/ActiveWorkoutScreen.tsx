@@ -10,6 +10,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  StyleProp,
+  TextStyle,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NumPad, PadApi, PadContext, PadTarget, applyKey, parsePad } from '../components/NumPad';
@@ -19,7 +21,7 @@ import { ExerciseCard, ExerciseCardRef } from '../components/ExerciseCard';
 import { RestTimerBar } from '../components/RestTimer';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
-import { getProfile } from '../utils/storage';
+import { getProfile, DEFAULT_PROFILE } from '../utils/storage';
 import { BODY_PART_LABELS, setsForSlot, targetProgress, whatsLeft } from '../utils/bodyParts';
 import { formatTimer } from '../utils/helpers';
 import { UserProfile, PersonalRecord } from '../types';
@@ -38,7 +40,6 @@ export function ActiveWorkoutScreen({ navigation }: any) {
     newPRs,
     clearPRs,
   } = useWorkout();
-  const [elapsed, setElapsed] = useState(0);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [pickingTarget, setPickingTarget] = useState<string | null>(null);
   // A second tap on Finish while the first save is still running used to
@@ -148,15 +149,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
   }, []);
 
   useEffect(() => {
-    if (!activeWorkout) return;
-    setWorkoutName(activeWorkout.name);
-
-    const timer = setInterval(() => {
-      const start = new Date(activeWorkout.startTime).getTime();
-      setElapsed(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
-
-    return () => clearInterval(timer);
+    if (activeWorkout) setWorkoutName(activeWorkout.name);
   }, [activeWorkout?.startTime]);
 
   if (!activeWorkout || !isWorkoutActive) {
@@ -187,7 +180,10 @@ export function ActiveWorkoutScreen({ navigation }: any) {
     finishing.current = true;
     let prs: PersonalRecord[] = [];
     try {
-      prs = await finishWorkout();
+      prs = await finishWorkout(workoutName);
+    } catch (e: any) {
+      Alert.alert('Not saved', `${e?.message || 'The workout could not be saved.'}\n\nThis workout is still open.`);
+      return;
     } finally {
       finishing.current = false;
     }
@@ -237,7 +233,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
 
         <View style={styles.timerContainer}>
           <Ionicons name="time-outline" size={16} color={Colors.primary} />
-          <Text style={styles.timerText}>{formatTimer(elapsed)}</Text>
+          <ElapsedClock startTime={activeWorkout.startTime} style={styles.timerText} />
         </View>
 
         <Pressable
@@ -342,6 +338,8 @@ export function ActiveWorkoutScreen({ navigation }: any) {
                     onMoveUp={idx > 0 ? () => reorderExercise(idx, idx - 1) : undefined}
                     onMoveDown={idx < activeWorkout.exercises.length - 1 ? () => reorderExercise(idx, idx + 1) : undefined}
                     onSetCompleted={handleSetCompleted}
+                    restDefault={profile?.restTimerDefault ?? DEFAULT_PROFILE.restTimerDefault}
+                    autoRest={profile?.autoRestTimer !== false}
                     targetPart={we.targetId ? targetById.get(we.targetId)?.part : undefined}
                     targetLabel={(() => {
                       const t = we.targetId ? targetById.get(we.targetId) : undefined;
@@ -356,6 +354,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
                 {nextExercise && (
                   <Pressable
                     onPress={() => toggleSuperset(we.id, nextExercise.id)}
+                    hitSlop={{ top: 4, bottom: 4 }}
                     style={[
                       ssStyles.linkBtn,
                       nextInSameSuperset && ssStyles.linkBtnActive,
@@ -364,7 +363,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
                     <Ionicons
                       name={nextInSameSuperset ? 'unlink' : 'link'}
                       size={14}
-                      color={nextInSameSuperset ? Colors.primary : Colors.textTertiary}
+                      color={nextInSameSuperset ? Colors.primary : Colors.textSecondary}
                     />
                     <Text style={[
                       ssStyles.linkText,
@@ -420,7 +419,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
       />
 
       {/* Finish Modal */}
-      <Modal visible={showFinishModal} animationType="slide" transparent>
+      <Modal visible={showFinishModal} animationType="none" transparent>
         <View style={modalStyles.overlay}>
           <View style={modalStyles.container}>
             <Text style={modalStyles.title}>Finish Workout</Text>
@@ -435,7 +434,7 @@ export function ActiveWorkoutScreen({ navigation }: any) {
 
             <View style={modalStyles.summary}>
               <Text style={modalStyles.summaryText}>
-                {formatTimer(elapsed)} | {completedSets} sets
+                <ElapsedClock startTime={activeWorkout.startTime} /> | {completedSets} sets
               </Text>
             </View>
 
@@ -453,6 +452,17 @@ export function ActiveWorkoutScreen({ navigation }: any) {
     </SafeAreaView>
     </PadContext.Provider>
   );
+}
+
+/** The workout clock. It ticks on its own, so the rest of the screen isn't redrawn every second. */
+function ElapsedClock({ startTime, style }: { startTime: string; style?: StyleProp<TextStyle> }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now - new Date(startTime).getTime()) / 1000));
+  return <Text style={style}>{formatTimer(seconds)}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -606,13 +616,13 @@ const ssStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 2,
+    paddingVertical: 10,
     marginVertical: -Spacing.sm,
   },
   linkBtnActive: {},
   linkText: {
-    color: Colors.textTertiary,
-    fontSize: 11,
+    color: Colors.textSecondary,
+    fontSize: FontSize.sm,
     fontWeight: '600',
   },
   linkTextActive: {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -95,10 +95,7 @@ export function ExercisePickerModal({
     if (visible && onlyPart) setSearch('');
   }, [visible, onlyPart]);
 
-  // Keep the body-part view while the sheet slides away, so it doesn't flash the full list.
-  const lastPart = React.useRef(onlyPart);
-  if (visible) lastPart.current = onlyPart;
-  const part = visible ? onlyPart : lastPart.current;
+  const part = onlyPart;
 
   useEffect(() => {
     if (visible) {
@@ -110,20 +107,24 @@ export function ExercisePickerModal({
     }
   }, [visible]);
 
-  const exercises = getAllExercises();
-  const matching = part
-    ? (search ? searchExercises(search) : exercises).filter(e => partMatches(part, e))
-    : search
-    ? searchExercises(search)
-    : selectedMuscle
-    ? exercises.filter(e => inChip(selectedMuscle, e))
-    : exercises;
-  // Most recently done first; the rest keep their usual order.
-  const usedAt = (e: Exercise) => (lastUsed[e.id] ? new Date(lastUsed[e.id]).getTime() : 0);
-  const filtered = matching
-    .map((e, i) => ({ e, i, t: usedAt(e) }))
-    .sort((a, b) => b.t - a.t || a.i - b.i)
-    .map(x => x.e);
+  // Built only while the picker is open; a hidden picker does no list work.
+  const filtered = useMemo(() => {
+    if (!visible) return [];
+    const exercises = getAllExercises();
+    const matching = part
+      ? (search ? searchExercises(search) : exercises).filter(e => partMatches(part, e))
+      : search
+      ? searchExercises(search)
+      : selectedMuscle
+      ? exercises.filter(e => inChip(selectedMuscle, e))
+      : exercises;
+    // Most recently done first; the rest keep their usual order.
+    const usedAt = (e: Exercise) => (lastUsed[e.id] ? new Date(lastUsed[e.id]).getTime() : 0);
+    return matching
+      .map((e, i) => ({ e, i, t: usedAt(e) }))
+      .sort((a, b) => b.t - a.t || a.i - b.i)
+      .map(x => x.e);
+  }, [visible, part, search, selectedMuscle, lastUsed, refreshKey]);
 
   const handleCreate = async () => {
     if (!newName.trim()) {
@@ -148,7 +149,7 @@ export function ExercisePickerModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+    <Modal visible={visible} animationType="none" presentationStyle="pageSheet">
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
           <Text style={styles.title}>Add Exercise</Text>
