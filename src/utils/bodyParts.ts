@@ -3,8 +3,27 @@ import { BodyPart, BodyPartTarget, Exercise, MuscleGroup, Workout } from '../typ
 export const BODY_PARTS: BodyPart[] = [
   'chest', 'back', 'shoulders', 'traps',
   'biceps', 'triceps', 'forearms',
-  'quads', 'hamstrings', 'glutes', 'calves', 'core',
+  'legs', 'quads', 'hamstrings', 'glutes', 'adductors', 'abductors', 'calves', 'core',
 ];
+
+/** The leg muscles: shown as subcategories of Legs wherever muscles are listed. */
+export const LEG_MUSCLES: MuscleGroup[] = ['quads', 'hamstrings', 'glutes', 'adductors', 'abductors', 'calves'];
+
+/** What a Legs target takes: any of these. */
+export const LEG_PARTS: BodyPart[] = LEG_MUSCLES as BodyPart[];
+
+/** A muscle filter: one muscle group, or Legs for every leg muscle at once. */
+export type MuscleChip = MuscleGroup | 'legs';
+
+/** Legs, or one of its subcategories, is selected. */
+export function isLegChip(c: MuscleChip | null): boolean {
+  return c === 'legs' || (!!c && LEG_MUSCLES.includes(c));
+}
+
+/** Is an exercise in this muscle group? Full-body ones count where their name places them. */
+export function exerciseInMuscle(m: MuscleGroup, e: Exercise): boolean {
+  return e.primaryMuscle === m || (e.primaryMuscle === 'full_body' && bodyPartOf(e) === m);
+}
 
 export const BODY_PART_LABELS: Record<BodyPart, string> = {
   chest: 'Chest',
@@ -14,12 +33,26 @@ export const BODY_PART_LABELS: Record<BodyPart, string> = {
   biceps: 'Biceps',
   triceps: 'Triceps',
   forearms: 'Forearms',
+  legs: 'Legs',
   quads: 'Quads',
   hamstrings: 'Hamstrings',
   glutes: 'Glutes',
+  adductors: 'Adductors',
+  abductors: 'Abductors',
   calves: 'Calves',
   core: 'Core',
 };
+
+// Exercises filed as full body (mostly ones imported from Strong under names
+// the app didn't know, like "Squat (Barbell)") are placed by their name.
+const NAME_HINTS: [RegExp, BodyPart][] = [
+  [/\bcalf|calves/i, 'calves'],
+  [/leg curl|hamstring|romanian|\brdl\b|stiff[- ]?leg|good ?morning|nordic/i, 'hamstrings'],
+  [/adduct|copenhagen/i, 'adductors'],
+  [/abduct|clamshell|fire hydrant/i, 'abductors'],
+  [/hip thrust|glute|kick ?back|bridge/i, 'glutes'],
+  [/squat|lunge|leg press|leg extension|step[- ]?up|sissy|pistol/i, 'quads'],
+];
 
 /** Which body part an exercise trains. */
 export function bodyPartOf(e: Exercise): BodyPart | null {
@@ -27,17 +60,31 @@ export function bodyPartOf(e: Exercise): BodyPart | null {
     case 'lats':
     case 'back':
       return 'back';
-    case 'full_body':
     case 'cardio':
       return null;
+    case 'full_body':
+      return NAME_HINTS.find(([re]) => re.test(e.name))?.[1] ?? null;
     default:
       return e.primaryMuscle as BodyPart;
   }
 }
 
-/** The broader muscle group a body part belongs to (for badges and stats). */
-export function muscleOfPart(part: BodyPart): MuscleGroup {
-  return part;
+/** Does an exercise count for a target on this body part? Legs takes any leg part. */
+export function partMatches(part: BodyPart, e: Exercise): boolean {
+  const p = bodyPartOf(e);
+  if (!p) return false;
+  return part === 'legs' ? LEG_PARTS.includes(p) : p === part;
+}
+
+/** The muscle groups a body part covers (for badges and stats). */
+export function musclesOfPart(part: BodyPart): MuscleGroup[] {
+  return part === 'legs' ? LEG_MUSCLES : [part as MuscleGroup];
+}
+
+/** Targets an exercise could count for: an exact body part before Legs. */
+function matchingTargets<T extends BodyPartTarget>(targets: T[], e: Exercise): T[] {
+  const fits = targets.filter(t => partMatches(t.part, e));
+  return [...fits.filter(t => t.part !== 'legs'), ...fits.filter(t => t.part === 'legs')];
 }
 
 /** Sets for each of a target's exercises, e.g. [4, 3]. */
@@ -79,8 +126,7 @@ export interface TargetProgress {
  * for its body part that still needs exercises, else the first for that part.
  */
 export function targetForExercise(workout: Workout, exercise: Exercise): (BodyPartTarget & { id: string }) | undefined {
-  const part = bodyPartOf(exercise);
-  const matching = (workout.targets ?? []).filter(t => t.part === part);
+  const matching = matchingTargets(workout.targets ?? [], exercise);
   return matching.find(t => workout.exercises.filter(we => we.targetId === t.id).length < t.exercises) ?? matching[0];
 }
 
@@ -93,10 +139,10 @@ export function targetForExercise(workout: Workout, exercise: Exercise): (BodyPa
 export function targetProgress(workout: Workout): TargetProgress[] {
   const targets = workout.targets ?? [];
   return targets.map(t => {
-    // Exercises with no target go to the first target for their body part.
-    const takesLoose = targets.find(x => x.part === t.part)?.id === t.id;
+    // Exercises with no target go to the first target they fit.
     const mine = workout.exercises.filter(we =>
-      bodyPartOf(we.exercise) === t.part && (we.targetId === t.id || (!we.targetId && takesLoose)));
+      partMatches(t.part, we.exercise) &&
+      (we.targetId === t.id || (!we.targetId && matchingTargets(targets, we.exercise)[0]?.id === t.id)));
     const counts = mine
       // Only ticked working sets with reps in them count; an empty tick isn't a set.
       .map(we => we.sets.filter(s => s.completed && !s.isWarmup && s.reps > 0).length)

@@ -52,6 +52,8 @@ export function getMuscleGroupColor(muscle: MuscleGroup): string {
     quads: Colors.legs,
     hamstrings: Colors.legs,
     glutes: Colors.legs,
+    adductors: Colors.legs,
+    abductors: Colors.legs,
     calves: Colors.legs,
     core: Colors.core,
     traps: Colors.back,

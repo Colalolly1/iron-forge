@@ -21,13 +21,23 @@ import {
 } from '../data/exercises';
 import { getMuscleGroupColor, generateId } from '../utils/helpers';
 import { renameExercise, saveCustomExercise } from '../utils/storage';
-import { Exercise, MuscleGroup, ExerciseCategory } from '../types';
+import { Exercise, MuscleGroup, ExerciseCategory, BodyPart } from '../types';
+import { exerciseInMuscle, isLegChip, LEG_MUSCLES, MuscleChip, partMatches } from '../utils/bodyParts';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
+/** Muscles to choose from when making or editing an exercise. */
 const MUSCLE_GROUPS: MuscleGroup[] = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms',
-  'quads', 'hamstrings', 'glutes', 'calves', 'core', 'traps', 'lats', 'cardio',
+  'quads', 'hamstrings', 'glutes', 'adductors', 'abductors', 'calves', 'core', 'traps', 'lats', 'cardio',
 ];
+
+/** The filter row. Legs is one tab; its muscles appear in a second row once it's picked. */
+const FILTER_CHIPS: MuscleChip[] = [
+  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'legs', 'core', 'traps', 'lats', 'cardio',
+];
+const LEG_CHIPS: MuscleChip[] = ['legs', ...LEG_MUSCLES];
+const chipLabel = (c: MuscleChip, inLegRow = false) => (c === 'legs' ? (inLegRow ? 'All legs' : 'Legs') : MUSCLE_GROUP_LABELS[c]);
+const chipColor = (c: MuscleChip) => getMuscleGroupColor(c === 'legs' ? 'quads' : c);
 
 const CATEGORIES: { label: string; value: ExerciseCategory }[] = [
   { label: 'Barbell', value: 'barbell' },
@@ -42,7 +52,7 @@ const CATEGORIES: { label: string; value: ExerciseCategory }[] = [
 
 export function ExercisesScreen({ navigation }: any) {
   const [search, setSearch] = useState('');
-  const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
+  const [selectedMuscle, setSelectedMuscle] = useState<MuscleChip | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ExerciseCategory | null>(null);
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Exercise | null>(null);
@@ -59,7 +69,9 @@ export function ExercisesScreen({ navigation }: any) {
     void refreshKey;
     let results = search ? searchExercises(search) : getAllExercises();
     if (selectedMuscle) {
-      results = results.filter(e => e.primaryMuscle === selectedMuscle);
+      const m = selectedMuscle;
+      results = results.filter(e =>
+        m === 'legs' || LEG_MUSCLES.includes(m) ? partMatches(m as BodyPart, e) : exerciseInMuscle(m, e));
     }
     if (selectedCategory) {
       results = results.filter(e => e.category === selectedCategory);
@@ -183,29 +195,46 @@ export function ExercisesScreen({ navigation }: any) {
             All
           </Text>
         </Pressable>
-        {MUSCLE_GROUPS.map(m => (
-          <Pressable
-            key={m}
-            onPress={() => setSelectedMuscle(m === selectedMuscle ? null : m)}
-            style={[
-              styles.filterChip,
-              selectedMuscle === m && {
-                backgroundColor: getMuscleGroupColor(m) + '33',
-                borderColor: getMuscleGroupColor(m),
-              },
-            ]}
-          >
-            <Text
+        {FILTER_CHIPS.map(m => {
+          const on = m === 'legs' ? isLegChip(selectedMuscle) : selectedMuscle === m;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => setSelectedMuscle(on ? null : m)}
               style={[
-                styles.filterChipText,
-                selectedMuscle === m && { color: getMuscleGroupColor(m) },
+                styles.filterChip,
+                on && { backgroundColor: chipColor(m) + '33', borderColor: chipColor(m) },
               ]}
             >
-              {MUSCLE_GROUP_LABELS[m]}
-            </Text>
-          </Pressable>
-        ))}
+              <Text style={[styles.filterChipText, on && { color: chipColor(m) }]}>
+                {chipLabel(m)}{m === 'legs' ? (on ? '  ▾' : '  ▸') : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
+
+      {/* Legs' subcategories, under the main row */}
+      {isLegChip(selectedMuscle) && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.filterScroll, { marginBottom: Spacing.sm }]}
+          contentContainerStyle={styles.filterContent}
+        >
+          {LEG_CHIPS.map(m => (
+            <Pressable
+              key={m}
+              onPress={() => setSelectedMuscle(m)}
+              style={[styles.filterChip, selectedMuscle === m && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, selectedMuscle === m && styles.filterChipTextActive]}>
+                {chipLabel(m, true)}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Category filter */}
       <ScrollView

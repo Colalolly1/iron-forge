@@ -1,6 +1,6 @@
 import { WorkoutTemplate, MuscleGroup, Exercise, BodyPart, BodyPartTarget } from '../types';
 import { EXERCISE_MAP } from '../data/exercises';
-import { BODY_PART_LABELS, muscleOfPart } from './bodyParts';
+import { BODY_PART_LABELS, musclesOfPart } from './bodyParts';
 import { generateId } from './helpers';
 import {
   getTemplates,
@@ -208,7 +208,7 @@ export async function importTemplatesJSON(jsonContent: string): Promise<Template
     }
 
     if (isTargets ? targets.length === 0 : templateExercises.length === 0) continue;
-    if (isTargets) targets.forEach(t => muscleSet.add(muscleOfPart(t.part)));
+    if (isTargets) targets.forEach(t => musclesOfPart(t.part).forEach(m => muscleSet.add(m)));
 
     const existing = existingTemplates.find(
       t => t.name.trim().toLowerCase() === entry.name!.trim().toLowerCase()

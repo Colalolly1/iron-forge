@@ -16,7 +16,7 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { MuscleGroupBadge } from '../components/MuscleGroupBadge';
 import { getWorkouts, getProfile, getPRs, getTemplates, getPlanOverrides } from '../utils/storage';
-import { PlanOverrides, dateKey, planFor, plannedOn } from '../utils/plan';
+import { PlanOverrides, dateKey, planFor, plannedOn, weekDates } from '../utils/plan';
 import { planDay, backToWeekly } from '../utils/planActions';
 import { PlanSheet } from '../components/PlanSheet';
 import { exercisesFromTemplate, targetsFromTemplate, templateLine } from '../utils/startTemplate';
@@ -55,9 +55,9 @@ export function HomeScreen({ navigation }: any) {
 
     // Calculate stats
     const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + (p.startOfWeek === 1 ? 1 : 0));
-    weekStart.setHours(0, 0, 0, 0);
+    // Monday to Sunday (or the profile's own start). The old sum put a Sunday
+    // in the following week, so Sunday showed 0 and its workout never counted.
+    const weekStart = weekDates(p.startOfWeek === 0 ? 0 : 1, now)[0];
 
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 

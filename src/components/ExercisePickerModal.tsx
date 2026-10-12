@@ -17,12 +17,12 @@ import { getAllExercises, searchExercises, MUSCLE_GROUP_LABELS, registerCustomEx
 import { getMuscleGroupColor, generateId, getRelativeTime } from '../utils/helpers';
 import { getCustomExercises, saveCustomExercise, getLastUsed } from '../utils/storage';
 import { Exercise, MuscleGroup, ExerciseCategory, ExerciseForce, BodyPart } from '../types';
-import { bodyPartOf, BODY_PART_LABELS } from '../utils/bodyParts';
+import { bodyPartOf, partMatches, isLegChip, LEG_MUSCLES, MuscleChip, BODY_PART_LABELS } from '../utils/bodyParts';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 const MUSCLE_GROUPS: MuscleGroup[] = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
-  'quads', 'hamstrings', 'glutes', 'calves', 'core', 'full_body', 'cardio',
+  'quads', 'hamstrings', 'glutes', 'adductors', 'abductors', 'calves', 'core', 'full_body', 'cardio',
 ];
 
 /** Back covers lats and traps too; arms-adjacent forearms sit under biceps. */
@@ -30,6 +30,22 @@ const MUSCLE_FAMILY: Partial<Record<MuscleGroup, MuscleGroup[]>> = {
   back: ['back', 'lats', 'traps'],
   biceps: ['biceps', 'forearms'],
 };
+
+/** The filter tabs. Legs is one tab; its muscles appear in a second row once it's picked. */
+type Chip = MuscleChip;
+const CHIPS: Chip[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'legs', 'core', 'full_body', 'cardio'];
+const LEG_CHIPS: Chip[] = ['legs', ...LEG_MUSCLES];
+const chipLabel = (c: Chip, inLegRow = false) => (c === 'legs' ? (inLegRow ? 'All legs' : 'Legs') : MUSCLE_GROUP_LABELS[c]);
+const chipColor = (c: Chip) => getMuscleGroupColor(c === 'legs' ? 'quads' : c);
+
+function inChip(c: Chip, e: Exercise): boolean {
+  if (c === 'legs') return partMatches('legs', e);
+  if (LEG_MUSCLES.includes(c)) return partMatches(c as BodyPart, e);
+  const family = MUSCLE_FAMILY[c] ?? [c];
+  // Full-body exercises placed by their name (e.g. "Squat (Barbell)" from Strong) show under that muscle too.
+  const part = bodyPartOf(e);
+  return family.includes(e.primaryMuscle) || (e.primaryMuscle === 'full_body' && !!part && family.includes(part as MuscleGroup));
+}
 
 const CATEGORIES: { value: ExerciseCategory; label: string }[] = [
   { value: 'barbell', label: 'Barbell' },
@@ -64,7 +80,7 @@ export function ExercisePickerModal({
   onlyPart?: BodyPart;
 }) {
   const [search, setSearch] = useState('');
-  const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
+  const [selectedMuscle, setSelectedMuscle] = useState<Chip | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastUsed, setLastUsed] = useState<Record<string, string>>({});
@@ -96,11 +112,11 @@ export function ExercisePickerModal({
 
   const exercises = getAllExercises();
   const matching = part
-    ? (search ? searchExercises(search) : exercises).filter(e => bodyPartOf(e) === part)
+    ? (search ? searchExercises(search) : exercises).filter(e => partMatches(part, e))
     : search
     ? searchExercises(search)
     : selectedMuscle
-    ? exercises.filter(e => (MUSCLE_FAMILY[selectedMuscle] ?? [selectedMuscle]).includes(e.primaryMuscle))
+    ? exercises.filter(e => inChip(selectedMuscle, e))
     : exercises;
   // Most recently done first; the rest keep their usual order.
   const usedAt = (e: Exercise) => (lastUsed[e.id] ? new Date(lastUsed[e.id]).getTime() : 0);
@@ -271,25 +287,42 @@ export function ExercisePickerModal({
                     All
                   </Text>
                 </Pressable>
-                {MUSCLE_GROUPS.map(m => (
-                  <Pressable
-                    key={m}
-                    onPress={() => setSelectedMuscle(m === selectedMuscle ? null : m)}
-                    style={[
-                      styles.muscleChip,
-                      selectedMuscle === m && {
-                        backgroundColor: getMuscleGroupColor(m) + '33',
-                        borderColor: getMuscleGroupColor(m),
-                      },
-                    ]}
-                  >
-                    <Text
+                {CHIPS.map(m => {
+                  const on = m === 'legs' ? isLegChip(selectedMuscle) : selectedMuscle === m;
+                  return (
+                    <Pressable
+                      key={m}
+                      onPress={() => setSelectedMuscle(on ? null : m)}
                       style={[
-                        styles.muscleChipText,
-                        selectedMuscle === m && { color: getMuscleGroupColor(m) },
+                        styles.muscleChip,
+                        on && { backgroundColor: chipColor(m) + '33', borderColor: chipColor(m) },
                       ]}
                     >
-                      {MUSCLE_GROUP_LABELS[m]}
+                      <Text style={[styles.muscleChipText, on && { color: chipColor(m) }]}>
+                        {chipLabel(m)}{m === 'legs' ? (on ? '  ▾' : '  ▸') : ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Legs' subcategories, under the main row */}
+            {!search && !part && isLegChip(selectedMuscle) && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.legFilter}
+                contentContainerStyle={styles.muscleFilterContent}
+              >
+                {LEG_CHIPS.map(m => (
+                  <Pressable
+                    key={m}
+                    onPress={() => setSelectedMuscle(m)}
+                    style={[styles.legChip, selectedMuscle === m && styles.legChipActive]}
+                  >
+                    <Text style={[styles.legChipText, selectedMuscle === m && styles.legChipTextActive]}>
+                      {chipLabel(m, true)}
                     </Text>
                   </Pressable>
                 ))}
@@ -447,6 +480,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   muscleFilter: {
+    flexGrow: 0,
     flexShrink: 0,
     marginTop: Spacing.sm,
     marginBottom: Spacing.sm,
@@ -462,6 +496,31 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgElevated,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  legFilter: {
+    flexGrow: 0,
+    flexShrink: 0,
+    marginBottom: Spacing.sm,
+  },
+  legChip: {
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs + 1,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  legChipActive: {
+    borderColor: Colors.text,
+    borderWidth: 2,
+  },
+  legChipText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  legChipTextActive: {
+    color: Colors.text,
+    fontWeight: '800',
   },
   muscleChipActive: {
     backgroundColor: Colors.primaryMuted,

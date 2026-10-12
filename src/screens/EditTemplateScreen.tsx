@@ -14,10 +14,10 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { ExercisePickerModal } from '../components/ExercisePickerModal';
 import { EXERCISE_MAP } from '../data/exercises';
-import { BODY_PARTS, BODY_PART_LABELS, muscleOfPart, slotSets } from '../utils/bodyParts';
+import { BODY_PARTS, BODY_PART_LABELS, LEG_PARTS, musclesOfPart, slotSets } from '../utils/bodyParts';
 import { saveTemplate, getExerciseRestTimer, saveExerciseRestTimer } from '../utils/storage';
 import { generateId } from '../utils/helpers';
-import { WorkoutTemplate, Exercise, MuscleGroup, BodyPartTarget } from '../types';
+import { WorkoutTemplate, Exercise, MuscleGroup, BodyPartTarget, BodyPart } from '../types';
 import { Colors, Spacing, FontSize, BorderRadius } from '../theme/colors';
 
 const TEMPLATE_COLORS = [
@@ -150,8 +150,9 @@ export function EditTemplateScreen({ navigation, route }: any) {
       }
     });
     targets.forEach(t => {
-      const m = muscleOfPart(t.part);
-      if (kind === 'targets' && !muscleGroups.includes(m)) muscleGroups.push(m);
+      for (const m of musclesOfPart(t.part)) {
+        if (kind === 'targets' && !muscleGroups.includes(m)) muscleGroups.push(m);
+      }
     });
 
     const template: WorkoutTemplate = {
@@ -407,18 +408,32 @@ export function EditTemplateScreen({ navigation, route }: any) {
                 </View>
               </View>
             ))}
-            <View style={styles.bpChips}>
-              {BODY_PARTS.filter(p => !targets.some(t => t.part === p)).map(p => (
+            {(() => {
+              // Body parts not added yet; the leg ones sit together under "Legs".
+              const free = BODY_PARTS.filter(p => !targets.some(t => t.part === p));
+              const isLeg = (p: BodyPart) => p === 'legs' || LEG_PARTS.includes(p);
+              const chip = (p: BodyPart) => (
                 <Pressable
                   key={p}
                   onPress={() => setTargets(prev => [...prev, { part: p, exercises: 1, sets: 3 }])}
                   style={styles.bpChip}
                 >
                   <Ionicons name="add" size={14} color={Colors.text} />
-                  <Text style={styles.bpChipText}>{BODY_PART_LABELS[p]}</Text>
+                  <Text style={styles.bpChipText}>{p === 'legs' ? 'Any leg exercise' : BODY_PART_LABELS[p]}</Text>
                 </Pressable>
-              ))}
-            </View>
+              );
+              return (
+                <>
+                  <View style={styles.bpChips}>{free.filter(p => !isLeg(p)).map(chip)}</View>
+                  {free.some(isLeg) && (
+                    <View style={styles.bpLegs}>
+                      <Text style={styles.bpLegsLabel}>Legs</Text>
+                      <View style={styles.bpChips}>{free.filter(isLeg).map(chip)}</View>
+                    </View>
+                  )}
+                </>
+              );
+            })()}
           </Card>
         )}
 
@@ -493,6 +508,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderLight,
   },
   bpChipText: { color: Colors.text, fontSize: FontSize.sm, fontWeight: '600' },
+  bpLegs: { marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.border },
+  bpLegsLabel: { color: Colors.textSecondary, fontSize: FontSize.xs, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
   stepper: { alignItems: 'center' },
   stepperLabel: { color: Colors.textSecondary, fontSize: 10, marginBottom: 2 },
   stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

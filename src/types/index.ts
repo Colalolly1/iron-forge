@@ -10,6 +10,8 @@ export type MuscleGroup =
   | 'quads'
   | 'hamstrings'
   | 'glutes'
+  | 'adductors'
+  | 'abductors'
   | 'calves'
   | 'core'
   | 'traps'
@@ -70,11 +72,11 @@ export interface WorkoutExercise {
   targetId?: string;
 }
 
-/** Body parts for target templates (back includes lats). */
+/** Body parts for target templates (back includes lats; legs takes any leg part). */
 export type BodyPart =
-  | 'chest' | 'back' | 'traps' | 'shoulders'
+  | 'chest' | 'back' | 'traps' | 'shoulders' | 'legs'
   | 'biceps' | 'triceps' | 'forearms'
-  | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'core';
+  | 'quads' | 'hamstrings' | 'glutes' | 'adductors' | 'abductors' | 'calves' | 'core';
 
 /** "Do N exercises for this body part, S sets each, around R reps." */
 export interface BodyPartTarget {

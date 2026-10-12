@@ -589,7 +589,7 @@ function getMuscleDistribution(workouts: Workout[]) {
 const MUSCLE_BUCKETS: { label: string; matches: MuscleGroup[] }[] = [
   { label: 'Chest', matches: ['chest'] },
   { label: 'Back', matches: ['back', 'lats', 'traps'] },
-  { label: 'Legs', matches: ['quads', 'hamstrings', 'glutes', 'calves'] },
+  { label: 'Legs', matches: ['quads', 'hamstrings', 'glutes', 'adductors', 'abductors', 'calves'] },
   { label: 'Shoulders', matches: ['shoulders'] },
   { label: 'Arms', matches: ['biceps', 'triceps', 'forearms'] },
   { label: 'Core', matches: ['core'] },
